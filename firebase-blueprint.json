@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "knowledge_base": {
+      "title": "Knowledge Base",
+      "description": "Stores indexed content from documents and websites for RAG.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the source" },
+        "content": { "type": "string", "description": "Extracted text content" },
+        "source": { "type": "string", "description": "URL or filename" },
+        "type": { "type": "string", "enum": ["pdf", "website", "manual"], "description": "Source type" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "source", "type", "createdAt"]
+    },
+    "leads": {
+      "title": "Leads",
+      "description": "Captured lead information from conversations.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "interest": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "createdAt"]
+    },
+    "transcripts": {
+      "title": "Transcripts",
+      "description": "Saved call transcripts.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "messages": { 
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "type": "string", "enum": ["user", "agent"] },
+              "text": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["messages", "createdAt"]
+    },
+    "appointments": {
+      "title": "Appointments",
+      "description": "Scheduled follow-up calls or meetings.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "date": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "date", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/knowledge_base/{docId}": {
+      "schema": "knowledge_base",
+      "description": "Collection of knowledge base documents."
+    },
+    "/leads/{leadId}": {
+      "schema": "leads",
+      "description": "Collection of captured leads."
+    },
+    "/transcripts/{transcriptId}": {
+      "schema": "transcripts",
+      "description": "Collection of conversation transcripts."
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "appointments",
+      "description": "Collection of scheduled appointments."
+    }
+  }
+}

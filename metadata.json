@@ -1,0 +1,7 @@
+{
+  "name": "AI Voice Business Agent",
+  "description": "A professional AI voice agent for customer support, sales, and appointment booking, powered by real-time RAG.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

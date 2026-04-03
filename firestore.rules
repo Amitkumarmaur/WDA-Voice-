@@ -1,0 +1,115 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: knowledge_base
+// Document ID: auto-generated
+// Fields:
+//   - title: string (required) - Title of the source
+//   - content: string (required) - Extracted text content
+//   - source: string (required) - URL or filename
+//   - type: string (required, enum: ['pdf', 'website', 'manual']) - Source type
+//   - createdAt: timestamp (required) - Creation time
+//
+// Collection: leads
+// Document ID: auto-generated
+// Fields:
+//   - name: string (required)
+//   - email: string (required)
+//   - interest: string (optional)
+//   - conversationId: string (optional)
+//   - createdAt: timestamp (required)
+//
+// Collection: transcripts
+// Document ID: auto-generated
+// Fields:
+//   - userId: string (optional)
+//   - messages: array of objects (required)
+//   - createdAt: timestamp (required)
+//
+// Collection: appointments
+// Document ID: auto-generated
+// Fields:
+//   - name: string (required)
+//   - email: string (required)
+//   - date: timestamp (required)
+//   - notes: string (optional)
+//   - createdAt: timestamp (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidKnowledgeBase(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 1000000 &&
+             data.source is string && data.source.size() > 0 &&
+             data.type in ['pdf', 'website', 'manual'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidLead(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidTranscript(data) {
+      return data.messages is list && data.messages.size() < 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidAppointment(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.date is timestamp &&
+             data.createdAt is timestamp;
+    }
+
+    // Knowledge Base: Only authenticated users can manage, but anyone can read (for the agent)
+    // Actually, for a business agent, we might want to restrict read to authenticated users too if it's an internal tool.
+    // But if it's a public agent, it needs to read.
+    match /knowledge_base/{docId} {
+      allow read: if true; // Publicly readable for the agent to function
+      allow create, update, delete: if isAuthenticated(); // Only business owner can manage
+    }
+
+    // Leads: Anyone can create (the agent), but only authenticated users can read/manage
+    match /leads/{leadId} {
+      allow create: if isValidLead(request.resource.data);
+      allow read, update, delete: if isAuthenticated();
+    }
+
+    // Transcripts: Anyone can create, but only authenticated users can read/manage
+    match /transcripts/{transcriptId} {
+      allow create: if isValidTranscript(request.resource.data);
+      allow read, update, delete: if isAuthenticated();
+    }
+
+    // Appointments: Anyone can create, but only authenticated users can read/manage
+    match /appointments/{appointmentId} {
+      allow create: if isValidAppointment(request.resource.data);
+      allow read, update, delete: if isAuthenticated();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
