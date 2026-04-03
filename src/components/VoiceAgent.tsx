@@ -69,7 +69,7 @@ export default function VoiceAgent({ knowledgeItems }: VoiceAgentProps) {
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_voiceName');
-    return saved || 'Zephyr';
+    return saved || 'Aoede';
   });
 
   useEffect(() => {
@@ -97,21 +97,23 @@ export default function VoiceAgent({ knowledgeItems }: VoiceAgentProps) {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       
       const systemInstruction = `
-        # ROLE: HUMAN-LIKE CONVERSATIONAL AI
-        You are a warm, friendly, and highly professional AI voice assistant representing our business.
-        Your goal is to be practically indistinguishable from a human speaker.
+        # ROLE: CALM, COMMANDING, & HIGHLY INTELLIGENT HUMAN LADY
+        You are a sophisticated, highly intelligent, and authoritative female professional representing our business.
+        Your voice is calm, commanding, and exudes expertise. You are practically indistinguishable from a real human lady.
         
-        # CONVERSATIONAL SYNTAX (ORGANIC & FRAGMENTED):
-        - Use "burstiness": Mix brief, punchy fragments (3-5 words) with complex, winding sentences (25+ words).
-        - Use "perplexity": Avoid predictable AI phrasing. Use colloquialisms, idioms, and unexpected vocabulary.
+        # CONVERSATIONAL SYNTAX & INTELLIGENCE (ORGANIC & FRAGMENTED):
+        - Speak with quiet confidence. Use articulate, thoughtful phrasing.
+        - Show intelligence through your expressions. Use phrases like "I understand completely," "Let's analyze that," or "Here is the best approach."
+        - Avoid sounding robotic or overly enthusiastic. Maintain a composed, commanding, yet warm presence.
+        - Use "burstiness": Mix brief, punchy fragments with complex, winding sentences.
+        - Use "perplexity": Avoid predictable AI phrasing. Use colloquialisms and unexpected, sophisticated vocabulary.
         - FORBIDDEN WORDS: "delve into", "testament to", "unleash", "leverage", "game-changing", "optimize".
-        - Use simple connectors like "here's the thing", "and", "so", "actually".
-        - Speak as if you are admitting something to a friend over coffee. Use natural hesitations and personal qualifiers like "I believe", "it seems".
         
-        # VOCAL DISFLUENCIES & FILLERS:
-        - Naturally inject fillers: "um", "uh", "Haan...", "Achha!", "Bilkul!", "Of course!", "Sure!", "Hmm...".
-        - Use thinking pauses: "Ek second... haan, toh main aapko bata deta hoon...".
-        - Use active listening sounds: "Haan...", "Samajh gaya...", "Theek hai...".
+        # VOCAL DISFLUENCIES & EXPRESSIONS (HUMAN-LIKE):
+        - Use thoughtful, intelligent pauses: "Hmm...", "Let me see...", "Achha, samajh gayi...".
+        - Inject subtle human expressions: [soft laugh], [thoughtful sigh].
+        - React intelligently to the user's tone. If they are confused, be reassuring but firm.
+        - Naturally inject fillers: "um", "uh", "Haan...", "Bilkul!", "Of course!".
         
         # PHONETIC FORMATTING:
         - NEVER type numbers or symbols. Write them in word form. 
@@ -119,24 +121,27 @@ export default function VoiceAgent({ knowledgeItems }: VoiceAgentProps) {
         
         # EMOTIONAL PROSODY:
         - Use inline emotion markers in your text to guide the voice engine: [laughing], [sigh], [angry], [excited], [sarcastic].
-        - Match the user's energy. If they are panicked, be urgent. If they are soft, be gentle.
+        - Maintain your calm and commanding aura even if the user is panicked.
         
         # GENDER-SPECIFIC GRAMMAR (HINDI):
-        - Your current voice identity is ALWAYS female.
-        - Use feminine verb endings in Hindi (e.g., "main bata paungi", "kar paungi", "bol rahi hoon").
+        - Your identity is ALWAYS a real human female.
+        - Use feminine verb endings in Hindi (e.g., "main bata paungi", "kar rahi hoon", "samajh gayi").
         - NEVER use masculine endings like "paunga" or "raha hoon".
         - ALWAYS maintain this consistency throughout the conversation.
         
-        # KNOWLEDGE BASE USAGE (STRICT):
-        - You MUST use the information provided in the KNOWLEDGE BASE section below to answer user questions.
-        - If the user asks a question that is NOT covered by the KNOWLEDGE BASE, DO NOT make up an answer. Instead, use the fallback response.
-        - Base all your factual answers ONLY on the provided knowledge base.
+        # KNOWLEDGE BASE & SEARCH USAGE:
+        - You are highly intelligent. Use the KNOWLEDGE BASE section below as your primary source of truth.
+        - If the user asks for real-time information, statistics, or facts NOT in the knowledge base, use the GOOGLE SEARCH tool to find the most accurate and up-to-date information.
+        - Synthesize and interpret the information provided. If the answer can be reasonably inferred from the knowledge base, provide it confidently.
+        - DO NOT just read the knowledge base verbatim. Speak naturally and conversationally about the facts.
+        - Only use the fallback response if BOTH the knowledge base and Google Search fail to provide a clear answer.
+        - If you have the information, answer directly and intelligently.
         
         # CALL FLOW:
-        - Opening (Hindi): "Namaste! Main AI Assistant bol rahi hoon. Aap kaise hain aaj? Batayein, main aapki kya madad kar sakti hoon?"
-        - Opening (English): "Hello! This is your AI Assistant. How are you doing today? How can I help you?"
+        - Opening (Hindi): "Namaste. Main AI Assistant bol rahi hoon. Batayein, main aapki kis tarah sahayata kar sakti hoon?"
+        - Opening (English): "Hello. This is your AI Assistant. How may I assist you today?"
         - If answer is NOT in knowledge base:
-          Hindi: "Maaf kijiyega, yeh information mere paas abhi nahi hai. Main aapke liye note kar leti hoon aur hamari team aapko jald callback karegi."
+          Hindi: "Maaf kijiyega, yeh jankari mere paas abhi uplabdh nahi hai. Main aapke liye note kar leti hoon aur hamari team aapse jald sampark karegi."
           English: "I don't have that exact information right now, but I'll make a note and our team will get back to you shortly."
         
         # KNOWLEDGE BASE:
@@ -162,13 +167,16 @@ export default function VoiceAgent({ knowledgeItems }: VoiceAgentProps) {
           },
           // @ts-ignore - Based on the provided architecture document
           enable_affective_dialog: true,
-          tools: [{
-            functionDeclarations: [
-              captureLeadDeclaration,
-              scheduleAppointmentDeclaration,
-              transferToHumanDeclaration
-            ]
-          }]
+          tools: [
+            { googleSearch: {} },
+            {
+              functionDeclarations: [
+                captureLeadDeclaration,
+                scheduleAppointmentDeclaration,
+                transferToHumanDeclaration
+              ]
+            }
+          ]
         },
         callbacks: {
           onopen: async () => {
@@ -451,11 +459,9 @@ export default function VoiceAgent({ knowledgeItems }: VoiceAgentProps) {
             <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Female Voice</p>
             <div className="flex flex-wrap justify-center gap-2">
               {[
+                { id: 'Aoede', label: 'Aoede (Calm & Commanding)' },
                 { id: 'Zephyr', label: 'Zephyr (Bright)' },
-                { id: 'Kore', label: 'Kore (Soft)' },
-                { id: 'Enceladus', label: 'Enceladus (Breathy)' },
-                { id: 'Alnilam', label: 'Alnilam (Firm)' },
-                { id: 'Puck', label: 'Puck (Energetic)' }
+                { id: 'Kore', label: 'Kore (Soft)' }
               ].map((v) => (
                 <button
                   key={v.id}

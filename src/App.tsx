@@ -3,9 +3,12 @@ import { auth } from './lib/firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import VoiceAgent from './components/VoiceAgent';
 import KnowledgeBaseManager from './components/KnowledgeBaseManager';
+import KnowledgeBaseAnalyzer from './components/KnowledgeBaseAnalyzer';
 import { KnowledgeItem } from './types';
 import { LogIn, LogOut, Settings, Phone, LayoutDashboard, Loader2, ShieldCheck, Users } from 'lucide-react';
 import { cn } from './lib/utils';
+
+import { KnowledgeBaseService } from './services/knowledgeBaseService';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -14,6 +17,17 @@ export default function App() {
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
 
   useEffect(() => {
+    const fetchKnowledge = async () => {
+      try {
+        const items = await KnowledgeBaseService.getKnowledgeItems();
+        setKnowledgeItems(items);
+      } catch (error) {
+        console.error("Failed to fetch knowledge items:", error);
+      }
+    };
+
+    fetchKnowledge();
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setIsLoading(false);
@@ -159,6 +173,8 @@ export default function App() {
             </div>
             
             <KnowledgeBaseManager onUpdate={setKnowledgeItems} />
+            
+            <KnowledgeBaseAnalyzer knowledgeItems={knowledgeItems} />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="p-8 bg-white rounded-3xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow space-y-4">
