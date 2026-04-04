@@ -2,6 +2,7 @@ import { collection, addDoc, getDocs, query, orderBy, Timestamp, deleteDoc, doc 
 import { db } from '../lib/firebase';
 import { KnowledgeItem } from '../types';
 import * as pdfjs from 'pdfjs-dist';
+import { GoogleGenAI } from "@google/genai";
 
 // @ts-ignore - Vite handles this import
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -44,5 +45,31 @@ export const KnowledgeBaseService = {
     }
     
     return fullText;
+  },
+
+  async transcribeAudio(file: File): Promise<string> {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = btoa(
+      new Uint8Array(arrayBuffer)
+        .reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        {
+          inlineData: {
+            mimeType: file.type,
+            data: base64Data
+          }
+        },
+        {
+          text: "Please transcribe this audio file accurately. Provide only the transcription text."
+        }
+      ]
+    });
+
+    return result.text || "Transcription failed.";
   }
 };

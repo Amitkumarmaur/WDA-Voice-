@@ -4,9 +4,12 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User 
 import VoiceAgent from './components/VoiceAgent';
 import KnowledgeBaseManager from './components/KnowledgeBaseManager';
 import KnowledgeBaseAnalyzer from './components/KnowledgeBaseAnalyzer';
-import { KnowledgeItem } from './types';
-import { LogIn, LogOut, Settings, Phone, LayoutDashboard, Loader2, ShieldCheck, Users } from 'lucide-react';
+import VoiceCloner from './components/VoiceCloner';
+import PersonaSelector from './components/PersonaSelector';
+import { KnowledgeItem, VoiceProfile, VoicePersona } from './types';
+import { LogIn, LogOut, Settings, Phone, LayoutDashboard, Loader2, ShieldCheck, Users, Mic } from 'lucide-react';
 import { cn } from './lib/utils';
+import { VOICE_PERSONAS } from './constants';
 
 import { KnowledgeBaseService } from './services/knowledgeBaseService';
 
@@ -15,6 +18,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'agent' | 'dashboard'>('agent');
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
+  const [activeVoiceProfile, setActiveVoiceProfile] = useState<VoiceProfile | null>(null);
+  const [activePersona, setActivePersona] = useState<VoicePersona | null>(VOICE_PERSONAS[0]);
 
   useEffect(() => {
     const fetchKnowledge = async () => {
@@ -160,7 +165,11 @@ export default function App() {
             </div>
 
             <div className="lg:col-span-5">
-              <VoiceAgent knowledgeItems={knowledgeItems} />
+              <VoiceAgent 
+                knowledgeItems={knowledgeItems} 
+                voiceProfile={activeVoiceProfile}
+                selectedPersona={activePersona}
+              />
             </div>
           </div>
         ) : (
@@ -175,6 +184,10 @@ export default function App() {
             <KnowledgeBaseManager onUpdate={setKnowledgeItems} />
             
             <KnowledgeBaseAnalyzer knowledgeItems={knowledgeItems} />
+            
+            <VoiceCloner onUpdate={setActiveVoiceProfile} />
+            
+            <PersonaSelector selectedPersona={activePersona} onSelect={setActivePersona} />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="p-8 bg-white rounded-3xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow space-y-4">

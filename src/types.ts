@@ -1,3 +1,22 @@
+export interface VoiceProfile {
+  id?: string;
+  name: string;
+  description: string;
+  tone: string;
+  pace: string;
+  pitch: string;
+  recommendedVoice: string;
+  createdAt: any;
+}
+
+export interface VoicePersona {
+  id: string;
+  name: string;
+  description: string;
+  voiceName: string;
+  systemInstruction: string;
+}
+
 export interface Message {
   role: 'user' | 'agent';
   text: string;
@@ -9,7 +28,7 @@ export interface KnowledgeItem {
   title: string;
   content: string;
   source: string;
-  type: 'pdf' | 'website' | 'manual';
+  type: 'pdf' | 'website' | 'manual' | 'audio';
   createdAt: any;
 }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { KnowledgeBaseService } from '../services/knowledgeBaseService';
 import { KnowledgeItem } from '../types';
-import { FileText, Link, Plus, Trash2, Loader2, Globe, FileUp, X } from 'lucide-react';
+import { FileText, Link, Plus, Trash2, Loader2, Globe, FileUp, X, Music } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface KnowledgeBaseManagerProps {
@@ -38,17 +38,29 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
 
     setIsUploading(true);
     try {
-      const content = await KnowledgeBaseService.extractTextFromPdf(file);
+      let content = '';
+      let type: 'pdf' | 'audio' = 'pdf';
+
+      if (file.type === 'application/pdf') {
+        content = await KnowledgeBaseService.extractTextFromPdf(file);
+        type = 'pdf';
+      } else if (file.type.startsWith('audio/')) {
+        content = await KnowledgeBaseService.transcribeAudio(file);
+        type = 'audio';
+      } else {
+        throw new Error('Unsupported file type');
+      }
+
       await KnowledgeBaseService.addKnowledgeItem({
         title: file.name,
         content,
         source: file.name,
-        type: 'pdf'
+        type
       });
       await loadItems();
     } catch (error) {
-      console.error('Failed to process PDF:', error);
-      alert('Failed to process PDF. Please try again.');
+      console.error('Failed to process file:', error);
+      alert('Failed to process file. Please ensure it is a valid PDF or Audio file.');
     } finally {
       setIsUploading(false);
     }
@@ -104,11 +116,17 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
 
       {isAdding && (
         <div className="p-6 bg-indigo-50/50 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-300 border border-indigo-100/50">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-indigo-200 rounded-xl bg-white hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer transition-all group shadow-sm">
               <FileUp className="w-8 h-8 text-indigo-400 group-hover:text-indigo-600 mb-2 transition-colors" />
-              <span className="text-sm font-medium text-slate-600">Upload PDF Manual</span>
+              <span className="text-sm font-medium text-slate-600">Upload PDF</span>
               <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+            </label>
+
+            <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-indigo-200 rounded-xl bg-white hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer transition-all group shadow-sm">
+              <Music className="w-8 h-8 text-indigo-400 group-hover:text-indigo-600 mb-2 transition-colors" />
+              <span className="text-sm font-medium text-slate-600">Upload Audio</span>
+              <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
             </label>
             
             <div className="flex flex-col space-y-2">
@@ -164,9 +182,13 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
               <div className="flex items-center space-x-4">
                 <div className={cn(
                   "p-3 rounded-xl shadow-sm",
-                  item.type === 'pdf' ? "bg-rose-50 text-rose-600 border border-rose-100" : "bg-indigo-50 text-indigo-600 border border-indigo-100"
+                  item.type === 'pdf' ? "bg-rose-50 text-rose-600 border border-rose-100" : 
+                  item.type === 'audio' ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                  "bg-indigo-50 text-indigo-600 border border-indigo-100"
                 )}>
-                  {item.type === 'pdf' ? <FileText size={20} /> : <Globe size={20} />}
+                  {item.type === 'pdf' ? <FileText size={20} /> : 
+                   item.type === 'audio' ? <Music size={20} /> : 
+                   <Globe size={20} />}
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 line-clamp-1">{item.title}</h4>
