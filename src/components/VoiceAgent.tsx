@@ -12,6 +12,19 @@ interface VoiceAgentProps {
   selectedPersona?: VoicePersona | null;
 }
 
+const SWEET_FEMALE_VOICES = [
+  { id: 'v1', label: 'श्री (Sweet & Melodic)', engine: 'Aoede' },
+  { id: 'v2', label: 'श्री (Soft & Gentle)', engine: 'Kore' },
+  { id: 'v3', label: 'श्री (Bright & Cheerful)', engine: 'Zephyr' },
+  { id: 'v4', label: 'श्री (Warm & Inviting)', engine: 'Aoede' },
+  { id: 'v5', label: 'श्री (Calm & Sweet)', engine: 'Kore' },
+  { id: 'v6', label: 'श्री (Lively & Sweet)', engine: 'Zephyr' },
+  { id: 'v7', label: 'श्री (Elegant & Sweet)', engine: 'Aoede' },
+  { id: 'v8', label: 'श्री (Gentle & Clear)', engine: 'Kore' },
+  { id: 'v9', label: 'श्री (Upbeat & Sweet)', engine: 'Zephyr' },
+  { id: 'v10', label: 'श्री (Radiant & Sweet)', engine: 'Aoede' }
+];
+
 const captureLeadDeclaration: FunctionDeclaration = {
   name: "captureLead",
   description: "Capture lead information from the client.",
@@ -71,7 +84,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_voiceName');
-    return saved || 'Aoede';
+    return saved || 'v1';
   });
 
   useEffect(() => {
@@ -199,7 +212,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           speechConfig: {
             voiceConfig: { 
               prebuiltVoiceConfig: { 
-                voiceName: selectedPersona?.voiceName || voiceProfile?.recommendedVoice || voiceName 
+                voiceName: selectedPersona?.voiceName || voiceProfile?.recommendedVoice || SWEET_FEMALE_VOICES.find(v => v.id === voiceName)?.engine || 'Aoede'
               } 
             }
           },
@@ -496,11 +509,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           <div className="space-y-4 mb-8">
             <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Female Voice</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {[
-                { id: 'Aoede', label: 'Aoede (Calm & Commanding)' },
-                { id: 'Zephyr', label: 'Zephyr (Bright)' },
-                { id: 'Kore', label: 'Kore (Soft)' }
-              ].map((v) => (
+              {SWEET_FEMALE_VOICES.map((v) => (
                 <button
                   key={v.id}
                   onClick={() => setVoiceName(v.id)}
