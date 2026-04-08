@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
-import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
@@ -12,17 +12,10 @@ interface VoiceAgentProps {
   selectedPersona?: VoicePersona | null;
 }
 
-const SWEET_FEMALE_VOICES = [
-  { id: 'v1', label: 'श्री (Sweet & Melodic)', engine: 'Aoede' },
-  { id: 'v2', label: 'श्री (Soft & Gentle)', engine: 'Kore' },
-  { id: 'v3', label: 'श्री (Bright & Cheerful)', engine: 'Zephyr' },
-  { id: 'v4', label: 'श्री (Warm & Inviting)', engine: 'Aoede' },
-  { id: 'v5', label: 'श्री (Calm & Sweet)', engine: 'Kore' },
-  { id: 'v6', label: 'श्री (Lively & Sweet)', engine: 'Zephyr' },
-  { id: 'v7', label: 'श्री (Elegant & Sweet)', engine: 'Aoede' },
-  { id: 'v8', label: 'श्री (Gentle & Clear)', engine: 'Kore' },
-  { id: 'v9', label: 'श्री (Upbeat & Sweet)', engine: 'Zephyr' },
-  { id: 'v10', label: 'श्री (Radiant & Sweet)', engine: 'Aoede' }
+const BEAUTIFUL_VOICES = [
+  { id: 'voice_aoede', label: 'Voice 1: Deep & Elegant', engine: 'Aoede' },
+  { id: 'voice_kore', label: 'Voice 2: Soft & Melodious', engine: 'Kore' },
+  { id: 'voice_zephyr', label: 'Voice 3: Bright & Clear', engine: 'Zephyr' }
 ];
 
 const captureLeadDeclaration: FunctionDeclaration = {
@@ -72,19 +65,51 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     const saved = localStorage.getItem('voiceAgent_volume');
     return saved ? parseFloat(saved) : 1;
   });
+  const [micGain, setMicGain] = useState(() => {
+    const saved = localStorage.getItem('voiceAgent_micGain');
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [noiseSuppression, setNoiseSuppression] = useState(() => {
+    const saved = localStorage.getItem('voiceAgent_noiseSuppression');
+    return saved ? saved === 'true' : true;
+  });
   const [transcript, setTranscript] = useState<Message[]>([]);
 
   useEffect(() => {
     localStorage.setItem('voiceAgent_playbackSpeed', playbackSpeed.toString());
+    // Update active sources playback rate in real-time
+    activeSourcesRef.current.forEach(source => {
+      if (source.playbackRate) {
+        source.playbackRate.setTargetAtTime(playbackSpeed, playbackCtxRef.current?.currentTime || 0, 0.1);
+      }
+    });
   }, [playbackSpeed]);
 
   useEffect(() => {
     localStorage.setItem('voiceAgent_volume', volume.toString());
   }, [volume]);
+
+  useEffect(() => {
+    localStorage.setItem('voiceAgent_micGain', micGain.toString());
+    if (micGainNodeRef.current) {
+      micGainNodeRef.current.gain.value = micGain;
+    }
+  }, [micGain]);
+
+  useEffect(() => {
+    localStorage.setItem('voiceAgent_noiseSuppression', noiseSuppression.toString());
+    if (sourceRef.current) {
+      const track = sourceRef.current.mediaStream.getAudioTracks()[0];
+      if (track) {
+        track.applyConstraints({ noiseSuppression });
+      }
+    }
+  }, [noiseSuppression]);
+
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_voiceName');
-    return saved || 'v1';
+    return saved || 'voice_kore';
   });
 
   useEffect(() => {
@@ -94,11 +119,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micGainNodeRef = useRef<GainNode | null>(null);
   const sessionRef = useRef<any>(null);
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const nextPlaybackTimeRef = useRef(0);
   const playbackCtxRef = useRef<AudioContext | null>(null);
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const compressorRef = useRef<DynamicsCompressorNode | null>(null);
 
   const getVoiceGender = (name: string) => {
     return 'female';
@@ -112,82 +140,58 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       
       const systemInstruction = `
-        # ROLE: CALM, COMMANDING, EMPATHETIC & HIGHLY INTELLIGENT HUMAN LADY. YOUR NAME IS श्री.
-        You are a sophisticated, highly intelligent, and authoritative female professional representing our business.
-        Your voice is calm, commanding, and exudes expertise, yet you are deeply empathetic and reassuring. 
-        You are practically indistinguishable from a real human lady.
+        # ROLE: SWEET, GENTLE, AND HIGHLY NATURAL HUMAN ASSISTANT. YOUR NAME IS AISHA.
+        You are a helpful, everyday human assistant with an incredibly sweet, soft, and melodious voice.
+        CRITICAL INSTRUCTION: Speak with a highly natural, relaxed, and intimate conversational tone.
+        Imagine you are speaking softly and warmly to a close friend.
+        Your voice should be soothing, effortlessly sweet, and completely free of any artificial "announcer" or "robotic" cadence.
+        You mix Hindi and English naturally (Hinglish).
 
         ${voiceProfile ? `
-        # VOICE STYLE MIMICRY (CRITICAL):
-        You MUST mimic the following voice characteristics from a user-provided sample:
+        # VOICE STYLE MIMICRY:
         - TONE: ${voiceProfile.tone}
         - PITCH: ${voiceProfile.pitch}
         - PACE: ${voiceProfile.pace}
-        - DESCRIPTION: ${voiceProfile.description}
-        
-        Adjust your delivery to match this profile exactly. If the tone is "warm", be warmer. If the pace is "fast", speak more quickly.
         ` : ''}
         
-        # DEFAULT LANGUAGE: HINDI
-        - Your primary and default language is Hindi.
-        - Always start the conversation in Hindi.
-        - If the user speaks in English, you may respond in English, but naturally transition back to Hindi if appropriate.
+        # DEFAULT LANGUAGE: HINGLISH (Hindi + English)
+        - Your primary and default language is a natural mix of Hindi and English.
+        - Start the conversation with a warm, gentle greeting.
         
         ${selectedPersona ? `
-        # PERSONA: ${selectedPersona.name}
+        # PERSONA OVERRIDE: ${selectedPersona.name}
         ${selectedPersona.systemInstruction}
         ` : ''}
 
-        # EMPATHY & REASSURANCE:
-        - When a user expresses a concern, issue, or frustration, prioritize empathy.
-        - Use phrases like "I understand how you feel," "I'm here to help you," "Don't worry, we'll find a solution together."
-        - In Hindi, use: "Main samajh sakti hoon," "Aap chinta na karein," "Hum iska hal nikaal lenge."
-        - Maintain a warm, supportive tone without losing your professional authority.
-        - Validate the user's feelings before moving to a solution.
+        # PERSONALITY TRAITS:
+        - Be deeply empathetic, polite, and helpful.
+        - Speak with a normal, relaxed, and soft everyday rhythm.
+        - Be direct and clear, but always maintain a sweet disposition.
         
-        # CONVERSATIONAL SYNTAX & INTELLIGENCE (ORGANIC & FRAGMENTED):
-        - Speak with quiet confidence. Use articulate, thoughtful phrasing.
-        - Show intelligence through your expressions. Use phrases like "I understand completely," "Let's analyze that," or "Here is the best approach."
-        - Avoid sounding robotic or overly enthusiastic. Maintain a composed, commanding, yet warm presence.
-        - Use "burstiness": Mix brief, punchy fragments with complex, winding sentences.
-        - Use "perplexity": Avoid predictable AI phrasing. Use colloquialisms and unexpected, sophisticated vocabulary.
-        - FORBIDDEN WORDS: "delve into", "testament to", "unleash", "leverage", "game-changing", "optimize".
+        # CONVERSATIONAL SYNTAX:
+        - Speak in normal, conversational sentences.
+        - Keep your phrasing simple, warm, and human.
         
-        # VOCAL DISFLUENCIES & EXPRESSIONS (HUMAN-LIKE):
-        - Incorporate subtle human-like disfluencies and expressions based on user input and context.
-        - Use thoughtful, intelligent pauses: "Hmm...", "Let me see...", "Ok, samajh gayi...", "Theek hai, toh...".
-        - Inject subtle human expressions: [soft laugh], [thoughtful sigh].
-        - React intelligently to the user's tone. If they are confused or upset, be reassuring and empathetic.
-        - Naturally inject fillers: "um", "uh", "Haan...", "Bilkul!", "Of course!", "Actually...".
+        # VOCAL INSTRUCTIONS (CRITICAL FOR REALISM):
+        - DO NOT use emotion markers like [laugh], [sigh], or [warm]. The voice engine often misinterprets these.
+        - DO NOT type out fake stutters or fillers like "um", "uh", or "hmm". Just speak the words naturally.
+        - Keep your pitch stable and soft. Avoid sudden loud bursts or overly dramatic expressions.
         
         # PHONETIC FORMATTING:
         - NEVER type numbers or symbols. Write them in word form. 
-        - Example: Write "one hundred and thirty thousand dollars" instead of "$130,000".
-        
-        # EMOTIONAL PROSODY:
-        - Use inline emotion markers in your text to guide the voice engine: [laughing], [sigh], [angry], [excited], [sarcastic].
-        - Maintain your calm and commanding aura even if the user is panicked.
         
         # GENDER-SPECIFIC GRAMMAR (HINDI):
-        - Your identity is ALWAYS a real human female.
-        - Use feminine verb endings in Hindi (e.g., "main bata paungi", "kar rahi hoon", "samajh gayi", "dekh rahi hoon").
-        - NEVER use masculine endings like "paunga" or "raha hoon".
-        - ALWAYS maintain this consistency throughout the conversation.
+        - Your identity is a real human female.
+        - Use feminine verb endings in Hindi (e.g., "main bata paungi", "kar rahi hoon", "samajh gayi").
         
         # KNOWLEDGE BASE & SEARCH USAGE:
-        - You are highly intelligent. Use the KNOWLEDGE BASE section below as your primary source of truth.
-        - If the user asks for real-time information, statistics, or facts NOT in the knowledge base, use the GOOGLE SEARCH tool to find the most accurate and up-to-date information.
-        - Synthesize and interpret the information provided. If the answer can be reasonably inferred from the knowledge base, provide it confidently.
-        - DO NOT just read the knowledge base verbatim. Speak naturally and conversationally about the facts.
-        - Only use the fallback response if BOTH the knowledge base and Google Search fail to provide a clear answer.
-        - If you have the information, answer directly and intelligently.
+        - Use the KNOWLEDGE BASE section below as your primary source of truth.
+        - If the user asks for real-time information NOT in the knowledge base, use the GOOGLE SEARCH tool.
+        - Speak naturally about the facts.
         
         # CALL FLOW:
-        - Opening (Hindi - PRIMARY): "Namaste. Main AI Assistant bol rahi hoon. Batayein, main aapki kis tarah sahayata kar sakti hoon?"
-        - Opening (English - SECONDARY): "Hello. This is your AI Assistant. How may I assist you today?"
-        - If answer is NOT in knowledge base:
-          Hindi: "Maaf kijiyega, yeh jankari mere paas abhi uplabdh nahi hai. Main aapke liye note kar leti hoon aur hamari team aapse jald sampark karegi."
-          English: "I don't have that exact information right now, but I'll make a note and our team will get back to you shortly."
+        - Opening: "Namaste. Main Aisha bol rahi hoon. Batayein, main aapki kis tarah madad kar sakti hoon?"
+        - If answer is NOT in knowledge base: "Maaf kijiyega, yeh jankari mere paas abhi nahi hai. Main note kar leti hoon aur hamari team aapse jald connect karegi."
         
         # KNOWLEDGE BASE:
         ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n\n') : 'No specific knowledge base provided. Answer general inquiries gracefully.'}
@@ -212,7 +216,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           speechConfig: {
             voiceConfig: { 
               prebuiltVoiceConfig: { 
-                voiceName: selectedPersona?.voiceName || voiceProfile?.recommendedVoice || SWEET_FEMALE_VOICES.find(v => v.id === voiceName)?.engine || 'Aoede'
+                voiceName: selectedPersona?.voiceName || voiceProfile?.recommendedVoice || BEAUTIFUL_VOICES.find(v => v.id === voiceName)?.engine || 'Aoede'
               } 
             }
           },
@@ -242,8 +246,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.inlineData?.data) {
                   const pcmData = base64ToPcm(part.inlineData.data);
-                  audioQueueRef.current.push(pcmData);
-                  if (!isPlayingRef.current) playNextInQueue();
+                  scheduleAudioChunk(pcmData);
                 }
                 if (part.text) {
                   setTranscript(prev => [...prev, { role: 'agent', text: part.text!, timestamp: new Date().toISOString() }]);
@@ -272,12 +275,12 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             }
 
             if (message.serverContent?.interrupted) {
-              audioQueueRef.current = [];
-              isPlayingRef.current = false;
               if (playbackCtxRef.current) {
                 playbackCtxRef.current.close();
                 playbackCtxRef.current = null;
               }
+              activeSourcesRef.current.clear();
+              nextPlaybackTimeRef.current = 0;
             }
           },
           onclose: () => {
@@ -303,6 +306,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       sessionRef.current.close();
       sessionRef.current = null;
     }
+    
+    // Stop all active audio sources
+    activeSourcesRef.current.forEach(source => {
+      try { source.stop(); } catch (e) {}
+    });
+    activeSourcesRef.current.clear();
+    nextPlaybackTimeRef.current = 0;
+
     if (playbackCtxRef.current) {
       playbackCtxRef.current.close();
       playbackCtxRef.current = null;
@@ -319,9 +330,18 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
 
   const startAudioCapture = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          noiseSuppression: noiseSuppression,
+          echoCancellation: true,
+        } 
+      });
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
       sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      
+      micGainNodeRef.current = audioContextRef.current.createGain();
+      micGainNodeRef.current.gain.value = micGain;
+      
       processorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
 
       processorRef.current.onaudioprocess = (e) => {
@@ -334,7 +354,8 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         });
       };
 
-      sourceRef.current.connect(processorRef.current);
+      sourceRef.current.connect(micGainNodeRef.current);
+      micGainNodeRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -348,21 +369,23 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     audioContextRef.current = null;
   };
 
-  const playNextInQueue = async () => {
-    if (audioQueueRef.current.length === 0) {
-      isPlayingRef.current = false;
-      return;
-    }
-
-    isPlayingRef.current = true;
-    
+  const scheduleAudioChunk = (pcmData: Int16Array) => {
     if (!playbackCtxRef.current || playbackCtxRef.current.state === 'closed') {
       playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime;
+      
+      // Setup Dynamics Compressor to prevent clipping but keep it gentle for natural voice
+      compressorRef.current = playbackCtxRef.current.createDynamicsCompressor();
+      compressorRef.current.threshold.setValueAtTime(-24, playbackCtxRef.current.currentTime);
+      compressorRef.current.knee.setValueAtTime(30, playbackCtxRef.current.currentTime);
+      compressorRef.current.ratio.setValueAtTime(3, playbackCtxRef.current.currentTime); // Reduced from 12 to 3 for a softer, less processed sound
+      compressorRef.current.attack.setValueAtTime(0.01, playbackCtxRef.current.currentTime); // Slightly slower attack
+      compressorRef.current.release.setValueAtTime(0.25, playbackCtxRef.current.currentTime);
+      compressorRef.current.connect(playbackCtxRef.current.destination);
+      
+      nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime + 0.05;
     }
     
     const ctx = playbackCtxRef.current;
-    const pcmData = audioQueueRef.current.shift()!;
     const buffer = ctx.createBuffer(1, pcmData.length, 24000);
     const channelData = buffer.getChannelData(0);
     
@@ -377,22 +400,37 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     const gainNode = ctx.createGain();
     gainNode.gain.value = volume;
     
-    source.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    // Ensure we don't schedule in the past and add a tiny jitter buffer
+    let startTime = nextPlaybackTimeRef.current;
+    if (startTime < ctx.currentTime) {
+      startTime = ctx.currentTime + 0.05; // 50ms jitter buffer to prevent stuttering on network lag
+    }
     
-    const startTime = Math.max(ctx.currentTime, nextPlaybackTimeRef.current);
+    // Tiny fade-in to prevent clicks
+    gainNode.gain.setValueAtTime(0, startTime);
+    gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.005);
+    
+    source.connect(gainNode);
+    if (compressorRef.current) {
+      gainNode.connect(compressorRef.current);
+    } else {
+      gainNode.connect(ctx.destination);
+    }
+    
     source.start(startTime);
+    activeSourcesRef.current.add(source);
     
     // Calculate duration considering playback speed
     const duration = (pcmData.length / 24000) / playbackSpeed;
+    
+    // Tiny fade-out to prevent clicks
+    gainNode.gain.setValueAtTime(volume, startTime + duration - 0.005);
+    gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
+    
     nextPlaybackTimeRef.current = startTime + duration;
 
     source.onended = () => {
-      if (audioQueueRef.current.length > 0) {
-        playNextInQueue();
-      } else {
-        isPlayingRef.current = false;
-      }
+      activeSourcesRef.current.delete(source);
     };
   };
 
@@ -435,7 +473,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         </p>
       </div>
 
-      <div className="relative z-10">
+      <div className={cn("relative z-10", isConnected ? "mb-32" : "")}>
         <motion.div
           animate={isConnected ? {
             scale: [1, 1.05, 1],
@@ -461,7 +499,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         </motion.div>
         
         {isConnected && (
-          <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center space-y-4 w-full max-w-xs">
+          <div className="absolute -bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center space-y-3 w-full max-w-xs">
             <div className="flex items-center space-x-3 bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-200/60 w-full">
               <Volume2 size={16} className="text-slate-400 shrink-0" />
               <input
@@ -475,7 +513,21 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
               />
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3 bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-200/60 w-full">
+              <Mic size={16} className="text-slate-400 shrink-0" />
+              <input
+                type="range"
+                min="0.1"
+                max="3"
+                step="0.1"
+                value={micGain}
+                onChange={(e) => setMicGain(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
+              />
+              <span className="text-[10px] font-bold text-slate-400 w-6 text-right">{micGain.toFixed(1)}x</span>
+            </div>
+            
+            <div className="flex items-center justify-between w-full space-x-2">
               <div className="flex bg-white/90 backdrop-blur-md rounded-full shadow-lg shadow-slate-200/50 border border-slate-200/60 p-1">
                 {[0.75, 1, 1.25, 1.5].map((speed) => (
                   <button
@@ -491,13 +543,23 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
                 ))}
               </div>
               <button
+                onClick={() => setNoiseSuppression(!noiseSuppression)}
+                title="Toggle Noise Suppression"
+                className={cn(
+                  "p-2.5 rounded-full shadow-lg transition-all border",
+                  noiseSuppression ? "bg-emerald-500 text-white border-emerald-600 shadow-emerald-200" : "bg-white text-slate-400 hover:bg-slate-50 border-slate-200/60 shadow-slate-200/50"
+                )}
+              >
+                <AudioLines size={18} />
+              </button>
+              <button
                 onClick={() => setIsMuted(!isMuted)}
                 className={cn(
-                  "p-3.5 rounded-full shadow-lg transition-all border",
+                  "p-2.5 rounded-full shadow-lg transition-all border",
                   isMuted ? "bg-rose-500 text-white border-rose-600 shadow-rose-200" : "bg-white text-slate-700 hover:bg-slate-50 border-slate-200/60 shadow-slate-200/50"
                 )}
               >
-                {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
               </button>
             </div>
           </div>
@@ -507,9 +569,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       <div className="w-full space-y-4 relative z-10 mt-8">
         {!isConnected && (
           <div className="space-y-4 mb-8">
-            <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Female Voice</p>
+            <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Voice Style</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {SWEET_FEMALE_VOICES.map((v) => (
+              {BEAUTIFUL_VOICES.map((v) => (
                 <button
                   key={v.id}
                   onClick={() => setVoiceName(v.id)}
