@@ -81,6 +81,16 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    function isValidVoiceProfile(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
+             data.tone is string && data.tone.size() > 0 && data.tone.size() < 50 &&
+             data.pace is string && data.pace.size() > 0 && data.pace.size() < 50 &&
+             data.pitch is string && data.pitch.size() > 0 && data.pitch.size() < 50 &&
+             data.recommendedVoice is string && data.recommendedVoice.size() > 0 && data.recommendedVoice.size() < 50 &&
+             data.createdAt is timestamp;
+    }
+
     // Knowledge Base: Only authenticated users can manage, but anyone can read (for the agent)
     // Actually, for a business agent, we might want to restrict read to authenticated users too if it's an internal tool.
     // But if it's a public agent, it needs to read.
@@ -105,6 +115,13 @@ service cloud.firestore {
     match /appointments/{appointmentId} {
       allow create: if isValidAppointment(request.resource.data);
       allow read, update, delete: if isAuthenticated();
+    }
+
+    // Voice Profiles: Only authenticated users can manage, but anyone can read (for the agent)
+    match /voice_profiles/{profileId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidVoiceProfile(request.resource.data);
+      allow update, delete: if isAuthenticated();
     }
 
     // Default deny

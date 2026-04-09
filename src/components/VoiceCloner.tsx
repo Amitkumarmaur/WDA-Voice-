@@ -68,8 +68,8 @@ export default function VoiceCloner({ onUpdate }: VoiceClonerProps) {
             <Mic size={24} />
           </div>
           <div>
-            <h3 className="text-2xl font-display font-bold text-slate-900">Voice Cloning</h3>
-            <p className="text-sm text-slate-500">Upload a voice sample for the AI to mimic.</p>
+            <h3 className="text-2xl font-display font-bold text-slate-900">Voice Style Matcher</h3>
+            <p className="text-sm text-slate-500">Analyze a voice sample to match its tone and style.</p>
           </div>
         </div>
         {activeProfile && (
@@ -120,11 +120,17 @@ export default function VoiceCloner({ onUpdate }: VoiceClonerProps) {
           <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm space-y-2">
             <div className="flex items-center space-x-2 text-rose-600">
               <Info size={16} />
-              <span className="text-xs font-bold uppercase tracking-wider">Analysis Result</span>
+              <span className="text-xs font-bold uppercase tracking-wider">Analysis Result & Acting Instructions</span>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed italic">
               "{activeProfile.description}"
             </p>
+            <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100 flex items-start space-x-2">
+              <Info size={16} className="text-indigo-500 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-indigo-700">
+                <strong>Note:</strong> The real-time AI uses the closest available pre-built voice ({activeProfile.recommendedVoice}) and modifies its acting style to match these characteristics. It is not a 1:1 deepfake clone.
+              </p>
+            </div>
           </div>
         </div>
       ) : (
@@ -133,7 +139,7 @@ export default function VoiceCloner({ onUpdate }: VoiceClonerProps) {
             <Upload className="w-12 h-12 text-rose-400 group-hover:text-rose-600 mb-4 transition-colors" />
             <h4 className="text-lg font-bold text-slate-900 mb-1">Upload Voice Sample</h4>
             <p className="text-sm text-slate-500 text-center max-w-xs">
-              Upload a clear 10-30 second recording of the voice you want the AI to mimic.
+              Upload a clear 10-30 second recording. The AI will analyze the emotion, pace, and tone, and apply it to the closest available AI voice.
             </p>
             <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
           </label>

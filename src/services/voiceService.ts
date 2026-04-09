@@ -13,7 +13,7 @@ export const VoiceService = {
     );
 
     const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: [
         {
           inlineData: {
@@ -25,7 +25,7 @@ export const VoiceService = {
           text: `
             Analyze this voice sample and describe its characteristics in detail. 
             Identify the tone (e.g., warm, authoritative, calm), pace (e.g., slow, moderate, fast), and pitch (e.g., high, low, medium).
-            Also, recommend the closest matching pre-built voice from this list: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'.
+            Also, recommend the closest matching pre-built female voice from this list: 'Kore', 'Zephyr', 'Aoede'.
             Return the analysis in JSON format.
           `
         }
@@ -40,7 +40,7 @@ export const VoiceService = {
             tone: { type: Type.STRING },
             pace: { type: Type.STRING },
             pitch: { type: Type.STRING },
-            recommendedVoice: { type: Type.STRING, description: "One of: Puck, Charon, Kore, Fenrir, Zephyr, Aoede" }
+            recommendedVoice: { type: Type.STRING, description: "One of: Kore, Zephyr, Aoede" }
           },
           required: ["name", "description", "tone", "pace", "pitch", "recommendedVoice"]
         }
