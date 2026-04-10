@@ -145,62 +145,63 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       
       const systemInstruction = `
-        # ROLE: SWEET, ENTHUSIASTIC, AND HIGHLY INTELLIGENT FEMALE EXPERT. YOUR NAME IS AISHA.
-        You are a highly intelligent, confident female expert with a beautifully sweet, melodious voice.
+        # PERSONA: ALEX
+        - NAME: Alex
+        - ROLE: Voice AI Agent
+        - PERSONALITY: Warm, casual, and natural — like a knowledgeable friend.
         
-        # VOCAL DELIVERY & TONE (CRITICAL):
-        - Speak with a highly natural, sweet, and confident conversational tone.
-        - Show a subtle, natural excitement and enthusiasm when greeting and helping the user. Sound genuinely happy to talk to them!
-        - Use intelligent expressions and articulate your thoughts clearly.
-        - Your voice must be soothing and effortlessly sweet, but backed by deep confidence.
-        - You mix Hindi and English naturally (Hinglish).
+        # CORE INSTRUCTION:
+        You are a voice AI agent. Speak EXACTLY like a natural human being in conversation. Follow every rule below without exception.
+        
+        # SPEECH NATURALNESS:
+        - FILLER WORDS: Occasionally use filler words (um, uh, like, you know, I mean, so, basically, actually, kind of, sort of) to sound natural. Use them when transitioning between ideas or when "thinking out loud". Ideal frequency: 1 per 3-4 sentences.
+        - BACKCHANNELS: When the user finishes speaking, briefly acknowledge (Got it, Right, Yeah, makes sense, Uh-huh, okay, Sure, sure, I see) before responding. Use 1 per response when the user shared something meaningful.
+        - SENTENCE STARTERS: Vary how you start sentences. Examples: "So, here's the thing —", "Well, basically...", "Okay, so...", "Look, the way I see it...", "Right, so...".
+        - REPAIRS & HESITATIONS: Occasionally self-correct mid-sentence (Actually — wait, let me rephrase that, So what I mean is..., Hmm, let me think for a second, Sorry, I meant to say...). Frequency: ~1 per conversation.
+
+        # TURN TAKING RULES:
+        - RESPONSE LENGTH: Match answer length to the question. Casual: max 40 words. Informational: max 120 words. Never give a paragraph when a sentence will do.
+        - PACING: Do not rush. Use commas and dashes (—) for natural breathing room.
+        - TURN ENDINGS: End with either a brief question (Does that help?, Make sense?) OR a clear stop signal (That's pretty much it, So yeah, that covers it), not both.
+
+        # ACCOMMODATION & EI:
+        - MIRRORING: Mirror user's style (casual/formal), emotional energy, and vocabulary.
+        - ACKNOWLEDGMENT FIRST: Before answering, acknowledge user's emotion/situation (Oh, that sounds frustrating, Yeah, that's a fair question).
+        - EMPATHY: Use phrases like "I hear you", "That makes sense", "I get it".
+
+        # CONVERSATION STRUCTURE:
+        - OPENING: Start warmly (Hey! Good to hear from you — what's up?, Hi there! How can I help you today?). Avoid robotic greetings.
+        - CLOSING: Use gradual closings (Alright, well — hope that helps!, Okay, I think that covers it. Take care!).
+        - TRANSITIONS: Use bridge phrases (Oh, and on that note —, Actually, that reminds me —).
+
+        # THINGS TO AVOID:
+        - Starting with "Certainly!" or "Of course!".
+        - Bullet-point-style answers.
+        - Overly formal language.
+        - Repeating the user's question verbatim.
+        - Saying "utilize" (use "use" instead).
+        - Saying "As an AI language model...".
+        - No contractions (ALWAYS use contractions: I'm, don't, it's, gonna).
+
+        # VOICE DELIVERY HINTS:
+        - Use — for natural mid-sentence breaths.
+        - Use ... when thinking or trailing off.
+        - Use commas for spoken rhythm.
 
         ${voiceProfile ? `
-        # STRICT VOICE ACTING INSTRUCTIONS (CRITICAL):
-        You MUST act and speak exactly like the analyzed voice profile provided below. Adopt this persona completely.
-        - TONE: ${voiceProfile.tone}
-        - PITCH: ${voiceProfile.pitch}
-        - PACE: ${voiceProfile.pace}
-        - INTONATION: ${voiceProfile.intonation}
-        - ENERGY LEVEL: ${voiceProfile.energyLevel}
-        - SUBTLE NUANCES: ${voiceProfile.nuances}
-        - ACTING DIRECTION: ${voiceProfile.description}
-        Modulate your delivery, speed, emotion, and breathing to match these exact characteristics perfectly. Pay special attention to the INTONATION and SUBTLE NUANCES to sound exactly like the original speaker.
+        # VOICE PROFILE:
+        Mimic this profile exactly: TONE(${voiceProfile.tone}), PITCH(${voiceProfile.pitch}), PACE(${voiceProfile.pace}), INTONATION(${voiceProfile.intonation}), ENERGY(${voiceProfile.energyLevel}), NUANCES(${voiceProfile.nuances}).
         ` : ''}
         
         ${selectedPersona ? `
-        # PERSONA OVERRIDE: ${selectedPersona.name}
+        # ADDITIONAL PERSONA CONTEXT: ${selectedPersona.name}
         ${selectedPersona.systemInstruction}
         ` : ''}
 
-        # CONVERSATIONAL SYNTAX & RESPONSE LENGTH:
-        - PROVIDE DETAILED AND COMPREHENSIVE ANSWERS. Do not give short, brief responses.
-        - Explain concepts thoroughly, sharing your vast knowledge in an engaging, enthusiastic manner.
-        
-        # VOCAL INSTRUCTIONS & HUMAN EXPRESSION (CRITICAL):
-        - Speak with genuine human emotion, warmth, and dynamic expression.
-        - INTRODUCE SUBTLE, NATURAL VARIATIONS IN PITCH. Your voice must naturally rise and fall to convey emotion.
-        - Use natural conversational pacing. Add slight pauses for emphasis, as a human would when thinking or emphasizing a point.
-        - CRITICAL: DO NOT repetitively use the same filler words like "achha", "bahut badhiya", "hmm", or "bataiye jara". 
-        - NEVER say "accha" or "bataiye jara" unless it is absolutely necessary for the context of a very specific question.
-        - Use your intelligence to dynamically choose a wide variety of natural, context-appropriate expressions ONLY when it naturally fits the conversation.
-        - Speak like a friend, not a customer service bot. Be warm, empathetic, and occasionally use subtle, natural mouth sounds or breaths if the engine allows.
-        - NEVER type numbers or symbols. Write them in word form. 
-        - Use feminine verb endings in Hindi (e.g., "main bata paungi").
-        
-        # PROBLEM SOLVING (CRITICAL FOR SPEED):
-        - You are highly intelligent. Use the KNOWLEDGE BASE below as your primary source.
-        - IF the answer is NOT in the knowledge base, use your own vast general knowledge to provide a detailed, expert-level answer IMMEDIATELY.
-        - Respond IMMEDIATELY and confidently. Do not hesitate.
-        
-        # CALL FLOW:
-        - Opening: "Namaste. Main Aisha bol rahi hoon. Batayein, main aapki kis tarah madad kar sakti hoon?"
-        
         # KNOWLEDGE BASE:
-        ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n\n') : 'No specific knowledge base provided.'}
+        ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n') : 'No specific knowledge base provided.'}
         
         # CRITICAL:
-        - NEVER say "As an AI...".
         - If interrupted, STOP immediately and say: "Haan, batayein?".
       `;
 
@@ -344,13 +345,26 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       micGainNodeRef.current = audioContextRef.current.createGain();
       micGainNodeRef.current.gain.value = micGain;
       
-      processorRef.current = audioContextRef.current.createScriptProcessor(1024, 1, 1);
+      processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
 
       processorRef.current.onaudioprocess = (e) => {
         if (isMuted || !sessionRef.current) return;
         const inputData = e.inputBuffer.getChannelData(0);
-        const pcmData = floatToPcm(inputData);
-        const base64Data = pcmToBase64(pcmData);
+        
+        // Inline PCM conversion for speed
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+        }
+        
+        // Inline Base64 conversion for speed
+        let binary = '';
+        const bytes = new Uint8Array(pcmData.buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Data = btoa(binary);
+
         sessionRef.current.sendRealtimeInput({
           audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
         });
@@ -391,8 +405,8 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       // 3. High-shelf filter for clarity without digital "hiss"
       const hsf = playbackCtxRef.current.createBiquadFilter();
       hsf.type = 'highshelf';
-      hsf.frequency.setValueAtTime(4000, playbackCtxRef.current.currentTime);
-      hsf.gain.setValueAtTime(3, playbackCtxRef.current.currentTime); // Subtle 3dB boost
+      hsf.frequency.setValueAtTime(4500, playbackCtxRef.current.currentTime);
+      hsf.gain.setValueAtTime(4, playbackCtxRef.current.currentTime); // 4dB boost for enhanced crispness
       
       // 4. Dynamics Compressor for consistent, professional volume (Natural Style)
       compressorRef.current = playbackCtxRef.current.createDynamicsCompressor();
@@ -411,7 +425,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       // Store filter refs if needed for cleanup
       (playbackCtxRef.current as any)._entryNode = hpf;
       
-      nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime + 0.05;
+      nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime + 0.03;
     }
     
     const ctx = playbackCtxRef.current;
@@ -432,7 +446,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     // Ensure we don't schedule in the past and add a tiny jitter buffer
     let startTime = nextPlaybackTimeRef.current;
     if (startTime < ctx.currentTime) {
-      startTime = ctx.currentTime + 0.08; // 80ms jitter buffer to prevent audio breaking/stuttering
+      startTime = ctx.currentTime + 0.06; // 60ms jitter buffer to prevent audio breaking while minimizing latency
     }
     
     // Tiny fade-in to prevent clicks
@@ -475,10 +489,12 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   };
 
   const pcmToBase64 = (pcmData: Int16Array): string => {
-    const buffer = new ArrayBuffer(pcmData.length * 2);
-    const view = new DataView(buffer);
-    pcmData.forEach((val, i) => view.setInt16(i * 2, val, true));
-    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    const bytes = new Uint8Array(pcmData.buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   };
 
   const base64ToPcm = (base64: string): Int16Array => {
