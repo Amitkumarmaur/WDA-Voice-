@@ -70,10 +70,13 @@
         "tone": { "type": "string" },
         "pace": { "type": "string" },
         "pitch": { "type": "string" },
+        "intonation": { "type": "string" },
+        "nuances": { "type": "string" },
+        "energyLevel": { "type": "string" },
         "recommendedVoice": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "description", "tone", "pace", "pitch", "recommendedVoice", "createdAt"]
+      "required": ["name", "description", "tone", "pace", "pitch", "intonation", "nuances", "energyLevel", "recommendedVoice", "createdAt"]
     }
   },
   "firestore": {

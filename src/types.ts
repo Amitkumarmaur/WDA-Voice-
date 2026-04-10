@@ -5,6 +5,9 @@ export interface VoiceProfile {
   tone: string;
   pace: string;
   pitch: string;
+  intonation: string;
+  nuances: string;
+  energyLevel: string;
   recommendedVoice: string;
   createdAt: any;
 }

@@ -102,19 +102,37 @@ export default function VoiceCloner({ onUpdate }: VoiceClonerProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tone</span>
-              <p className="text-sm font-medium text-slate-700 capitalize">{activeProfile.tone}</p>
+              <p className="text-sm font-medium text-slate-700 capitalize truncate" title={activeProfile.tone}>{activeProfile.tone}</p>
             </div>
             <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pitch</span>
-              <p className="text-sm font-medium text-slate-700 capitalize">{activeProfile.pitch}</p>
+              <p className="text-sm font-medium text-slate-700 capitalize truncate" title={activeProfile.pitch}>{activeProfile.pitch}</p>
             </div>
             <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pace</span>
-              <p className="text-sm font-medium text-slate-700 capitalize">{activeProfile.pace}</p>
+              <p className="text-sm font-medium text-slate-700 capitalize truncate" title={activeProfile.pace}>{activeProfile.pace}</p>
             </div>
+            {activeProfile.intonation && (
+              <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Intonation</span>
+                <p className="text-sm font-medium text-slate-700 capitalize truncate" title={activeProfile.intonation}>{activeProfile.intonation}</p>
+              </div>
+            )}
+            {activeProfile.energyLevel && (
+              <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Energy</span>
+                <p className="text-sm font-medium text-slate-700 capitalize truncate" title={activeProfile.energyLevel}>{activeProfile.energyLevel}</p>
+              </div>
+            )}
+            {activeProfile.nuances && (
+              <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Nuances</span>
+                <p className="text-sm font-medium text-slate-700 capitalize truncate" title={activeProfile.nuances}>{activeProfile.nuances}</p>
+              </div>
+            )}
           </div>
 
           <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm space-y-2">

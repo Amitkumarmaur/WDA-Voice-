@@ -23,8 +23,15 @@ export const VoiceService = {
         },
         {
           text: `
-            Analyze this voice sample and describe its characteristics in detail. 
-            Identify the tone (e.g., warm, authoritative, calm), pace (e.g., slow, moderate, fast), and pitch (e.g., high, low, medium).
+            Analyze this voice sample and describe its characteristics in extreme detail to allow for a highly accurate voice acting mimicry. 
+            Identify the following:
+            - tone (e.g., warm, authoritative, calm, breathy, raspy)
+            - pace (e.g., slow, moderate, fast, rhythmic, erratic)
+            - pitch (e.g., high, low, medium, vocal fry, resonant)
+            - intonation (e.g., upward inflection, flat, melodic, expressive)
+            - nuances (e.g., subtle sighs, lip smacks, specific pronunciation quirks, breathiness)
+            - energyLevel (e.g., low, relaxed, high, intense)
+            
             Also, recommend the closest matching pre-built female voice from this list: 'Kore', 'Zephyr', 'Aoede'.
             Return the analysis in JSON format.
           `
@@ -40,9 +47,12 @@ export const VoiceService = {
             tone: { type: Type.STRING },
             pace: { type: Type.STRING },
             pitch: { type: Type.STRING },
+            intonation: { type: Type.STRING },
+            nuances: { type: Type.STRING },
+            energyLevel: { type: Type.STRING },
             recommendedVoice: { type: Type.STRING, description: "One of: Kore, Zephyr, Aoede" }
           },
-          required: ["name", "description", "tone", "pace", "pitch", "recommendedVoice"]
+          required: ["name", "description", "tone", "pace", "pitch", "intonation", "nuances", "energyLevel", "recommendedVoice"]
         }
       }
     });

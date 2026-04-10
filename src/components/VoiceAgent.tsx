@@ -15,7 +15,12 @@ interface VoiceAgentProps {
 const BEAUTIFUL_VOICES = [
   { id: 'voice_aoede', label: 'Voice 1: Deep & Elegant', engine: 'Aoede' },
   { id: 'voice_kore', label: 'Voice 2: Soft & Melodious', engine: 'Kore' },
-  { id: 'voice_zephyr', label: 'Voice 3: Bright & Clear', engine: 'Zephyr' }
+  { id: 'voice_zephyr', label: 'Voice 3: Bright & Clear', engine: 'Zephyr' },
+  { id: 'voice_puck', label: 'Voice 4: Playful & Energetic', engine: 'Puck' },
+  { id: 'voice_charon', label: 'Voice 5: Authoritative & Calm', engine: 'Charon' },
+  { id: 'voice_fenrir', label: 'Voice 6: Deep & Resonant', engine: 'Fenrir' },
+  { id: 'voice_kore_warm', label: 'Voice 7: Warm & Friendly', engine: 'Kore' },
+  { id: 'voice_zephyr_pro', label: 'Voice 8: Professional & Sharp', engine: 'Zephyr' }
 ];
 
 const captureLeadDeclaration: FunctionDeclaration = {
@@ -109,7 +114,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_voiceName');
-    return saved || 'voice_kore';
+    return saved || 'voice_aoede';
   });
 
   useEffect(() => {
@@ -156,8 +161,11 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         - TONE: ${voiceProfile.tone}
         - PITCH: ${voiceProfile.pitch}
         - PACE: ${voiceProfile.pace}
+        - INTONATION: ${voiceProfile.intonation}
+        - ENERGY LEVEL: ${voiceProfile.energyLevel}
+        - SUBTLE NUANCES: ${voiceProfile.nuances}
         - ACTING DIRECTION: ${voiceProfile.description}
-        Modulate your delivery, speed, and emotion to match these exact characteristics perfectly.
+        Modulate your delivery, speed, emotion, and breathing to match these exact characteristics perfectly. Pay special attention to the INTONATION and SUBTLE NUANCES to sound exactly like the original speaker.
         ` : ''}
         
         ${selectedPersona ? `
@@ -171,10 +179,12 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         
         # VOCAL INSTRUCTIONS & HUMAN EXPRESSION (CRITICAL):
         - Speak with genuine human emotion, warmth, and dynamic expression.
-        - INTRODUCE SUBTLE, NATURAL VARIATIONS IN PITCH. Your voice must naturally rise and fall to convey emotion. Do not sound monotone or robotic.
-        - Use natural conversational pacing. Add slight pauses for emphasis where appropriate.
-        - CRITICAL: DO NOT repetitively use the same filler words like "achha", "bahut badhiya", or "hmm". 
+        - INTRODUCE SUBTLE, NATURAL VARIATIONS IN PITCH. Your voice must naturally rise and fall to convey emotion.
+        - Use natural conversational pacing. Add slight pauses for emphasis, as a human would when thinking or emphasizing a point.
+        - CRITICAL: DO NOT repetitively use the same filler words like "achha", "bahut badhiya", "hmm", or "bataiye jara". 
+        - NEVER say "accha" or "bataiye jara" unless it is absolutely necessary for the context of a very specific question.
         - Use your intelligence to dynamically choose a wide variety of natural, context-appropriate expressions ONLY when it naturally fits the conversation.
+        - Speak like a friend, not a customer service bot. Be warm, empathetic, and occasionally use subtle, natural mouth sounds or breaths if the engine allows.
         - NEVER type numbers or symbols. Write them in word form. 
         - Use feminine verb endings in Hindi (e.g., "main bata paungi").
         
@@ -199,8 +209,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         config: {
           responseModalities: [Modality.AUDIO],
           systemInstruction,
-          // @ts-ignore - Setting temperature as requested
-          temperature: 0.8, // Increased slightly to allow more natural, expressive, and human-like word choices
+          temperature: 0.7,
           speechConfig: {
             voiceConfig: { 
               prebuiltVoiceConfig: { 
@@ -275,6 +284,12 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           },
           onerror: (err) => {
             console.error('Live API Error:', err);
+            const errMsg = err.message?.toLowerCase() || '';
+            if (errMsg.includes('quota') || errMsg.includes('rate limit') || errMsg.includes('429')) {
+              setStatus('Quota exceeded. Please wait a moment and try again.');
+            } else {
+              setStatus('Connection lost');
+            }
             stopSession();
           }
         }
@@ -360,14 +375,41 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     if (!playbackCtxRef.current || playbackCtxRef.current.state === 'closed') {
       playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
       
-      // Setup Dynamics Compressor to prevent clipping but keep it gentle for natural voice
+      // Setup Audio Processing Chain for maximum clarity and human warmth
+      // 1. High-pass filter to remove low-end rumble but keep "chest" warmth
+      const hpf = playbackCtxRef.current.createBiquadFilter();
+      hpf.type = 'highpass';
+      hpf.frequency.setValueAtTime(70, playbackCtxRef.current.currentTime); // Slightly lower for more natural bass
+      
+      // 2. Peaking filter to add "body" and warmth to the voice (Low-mids)
+      const bodyFilter = playbackCtxRef.current.createBiquadFilter();
+      bodyFilter.type = 'peaking';
+      bodyFilter.frequency.setValueAtTime(250, playbackCtxRef.current.currentTime);
+      bodyFilter.Q.setValueAtTime(0.8, playbackCtxRef.current.currentTime);
+      bodyFilter.gain.setValueAtTime(3, playbackCtxRef.current.currentTime); // 3dB boost for warmth
+      
+      // 3. High-shelf filter for clarity without digital "hiss"
+      const hsf = playbackCtxRef.current.createBiquadFilter();
+      hsf.type = 'highshelf';
+      hsf.frequency.setValueAtTime(4000, playbackCtxRef.current.currentTime);
+      hsf.gain.setValueAtTime(3, playbackCtxRef.current.currentTime); // Subtle 3dB boost
+      
+      // 4. Dynamics Compressor for consistent, professional volume (Natural Style)
       compressorRef.current = playbackCtxRef.current.createDynamicsCompressor();
-      compressorRef.current.threshold.setValueAtTime(-24, playbackCtxRef.current.currentTime);
-      compressorRef.current.knee.setValueAtTime(30, playbackCtxRef.current.currentTime);
-      compressorRef.current.ratio.setValueAtTime(3, playbackCtxRef.current.currentTime); // Reduced from 12 to 3 for a softer, less processed sound
-      compressorRef.current.attack.setValueAtTime(0.01, playbackCtxRef.current.currentTime); // Slightly slower attack
+      compressorRef.current.threshold.setValueAtTime(-16, playbackCtxRef.current.currentTime);
+      compressorRef.current.knee.setValueAtTime(25, playbackCtxRef.current.currentTime); // Softer knee
+      compressorRef.current.ratio.setValueAtTime(2, playbackCtxRef.current.currentTime); // Less aggressive
+      compressorRef.current.attack.setValueAtTime(0.015, playbackCtxRef.current.currentTime); // Let transients pass
       compressorRef.current.release.setValueAtTime(0.25, playbackCtxRef.current.currentTime);
+      
+      // Connect the chain
+      hpf.connect(bodyFilter);
+      bodyFilter.connect(hsf);
+      hsf.connect(compressorRef.current);
       compressorRef.current.connect(playbackCtxRef.current.destination);
+      
+      // Store filter refs if needed for cleanup
+      (playbackCtxRef.current as any)._entryNode = hpf;
       
       nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime + 0.05;
     }
@@ -398,8 +440,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.005);
     
     source.connect(gainNode);
-    if (compressorRef.current) {
-      gainNode.connect(compressorRef.current);
+    const entryNode = (ctx as any)._entryNode;
+    if (entryNode) {
+      gainNode.connect(entryNode);
     } else {
       gainNode.connect(ctx.destination);
     }
