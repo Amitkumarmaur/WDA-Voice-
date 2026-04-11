@@ -151,7 +151,10 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     setStatus('Initializing AI engine...');
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      if (!GEMINI_API_KEY) {
+        throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY in environment variables and rebuild.');
+      }
+      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
       
       const systemInstruction = `
         # PERSONA: ALEX (WARRIORS DEFENCE ACADEMY)
