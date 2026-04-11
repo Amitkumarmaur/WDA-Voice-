@@ -384,6 +384,15 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           return;
         }
 
+        const readyState =
+          sessionRef.current?.connection?.readyState ||
+          sessionRef.current?.ws?.readyState ||
+          sessionRef.current?.socket?.readyState;
+
+        if (typeof readyState === 'number' && readyState !== 1) {
+          return;
+        }
+
         const inputData = e.inputBuffer.getChannelData(0);
         
         // Inline PCM conversion for speed
@@ -400,9 +409,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         }
         const base64Data = btoa(binary);
 
-        sessionRef.current.sendRealtimeInput({
-          audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-        });
+        try {
+          sessionRef.current.sendRealtimeInput({
+            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+          });
+        } catch (error) {
+          console.warn('Realtime input failed after session closed:', error);
+          stopSession();
+        }
       };
 
 
@@ -417,10 +431,36 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const stopAudioCapture = () => {
     if (processorRef.current) {
       processorRef.current.onaudioprocess = null;
-      processorRef.current.disconnect();
+      try {
+        processorRef.current.disconnect();
+      } catch (error) {
+        console.warn('Failed to disconnect processor:', error);
+      }
+      processorRef.current = null;
     }
-    if (sourceRef.current) sourceRef.current.disconnect();
-    if (audioContextRef.current) audioContextRef.current.close();
+    if (sourceRef.current) {
+      try {
+        sourceRef.current.disconnect();
+      } catch (error) {
+        console.warn('Failed to disconnect source:', error);
+      }
+      sourceRef.current = null;
+    }
+    if (micGainNodeRef.current) {
+      try {
+        micGainNodeRef.current.disconnect();
+      } catch (error) {
+        console.warn('Failed to disconnect gain node:', error);
+      }
+      micGainNodeRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (error) {
+        console.warn('Failed to close audio context:', error);
+      }
+    }
     audioContextRef.current = null;
   };
 
