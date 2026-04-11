@@ -270,6 +270,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           onopen: async () => {
             console.log('VoiceAgent: live session opened');
             setIsConnected(true);
+            isConnectedRef.current = true;
             setStatus('Establishing audio stream...');
             await startAudioCapture();
             setIsConnecting(false);
@@ -347,6 +348,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       sessionRef.current.close();
       sessionRef.current = null;
     }
+    isConnectedRef.current = false;
     
     // Stop all active audio sources
     activeSourcesRef.current.forEach(source => {
@@ -412,8 +414,16 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           );
 
           if (isSessionReady) {
+            console.log('VoiceAgent: sending audio chunk', { length: base64Data.length });
             sessionRef.current.sendRealtimeInput({
               audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+            });
+          } else {
+            console.log('VoiceAgent: session not ready for audio', {
+              isConnected: isConnectedRef.current,
+              isCapturing: isCapturingRef.current,
+              connectionState: sessionRef.current?.connectionState,
+              readyState: sessionRef.current?.connection?.readyState || sessionRef.current?.ws?.readyState || sessionRef.current?.socket?.readyState
             });
           }
         } catch (error) {
