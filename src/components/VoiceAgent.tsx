@@ -157,12 +157,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const startSession = async () => {
     setIsConnecting(true);
     setStatus('Initializing AI engine...');
+    console.log('VoiceAgent: startSession', { voiceName, language, status });
     
     try {
       if (!GEMINI_API_KEY) {
         throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in environment variables and rebuild.');
       }
       const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      console.log('VoiceAgent: created GoogleGenAI instance');
       
       const systemInstruction = `
         # PERSONA: ALEX (WARRIORS DEFENCE ACADEMY)
@@ -266,6 +268,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         },
         callbacks: {
           onopen: async () => {
+            console.log('VoiceAgent: live session opened');
             setIsConnected(true);
             setStatus('Establishing audio stream...');
             await startAudioCapture();
@@ -273,6 +276,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             setStatus('Agent is listening...');
           },
           onmessage: async (message) => {
+            console.log('VoiceAgent: live message', message);
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.inlineData?.data) {
@@ -318,7 +322,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             stopSession();
           },
           onerror: (err) => {
-            console.error('Live API Error:', err);
+            console.error('VoiceAgent: live API error', err);
             const errMsg = err.message?.toLowerCase() || '';
             if (errMsg.includes('quota') || errMsg.includes('rate limit') || errMsg.includes('429')) {
               setStatus('Quota exceeded. Please wait a moment and try again.');
@@ -421,6 +425,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       micGainNodeRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
       isCapturingRef.current = true;
+      console.log('VoiceAgent: audio capture started');
     } catch (error) {
       console.error('Microphone access denied:', error);
     }
