@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
 import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { GEMINI_API_KEY } from '../lib/config';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
