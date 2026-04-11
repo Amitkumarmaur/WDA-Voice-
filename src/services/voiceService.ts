@@ -2,10 +2,14 @@ import { collection, addDoc, getDocs, query, orderBy, Timestamp, deleteDoc, doc,
 import { db } from '../lib/firebase';
 import { VoiceProfile } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
+import { GEMINI_API_KEY } from '../lib/config';
 
 export const VoiceService = {
   async analyzeVoiceSample(file: File): Promise<VoiceProfile> {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    if (!GEMINI_API_KEY) {
+      throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in environment variables and rebuild.');
+    }
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = btoa(
       new Uint8Array(arrayBuffer)

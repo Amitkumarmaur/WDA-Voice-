@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
 import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { GEMINI_API_KEY } from '../lib/config';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -158,9 +159,10 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     setStatus('Initializing AI engine...');
     
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      console.log('GEMINI_API_KEY:', apiKey);
-      const ai = new GoogleGenAI({ apiKey: apiKey! });
+      if (!GEMINI_API_KEY) {
+        throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in environment variables and rebuild.');
+      }
+      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
       
       const systemInstruction = `
         # PERSONA: ALEX (WARRIORS DEFENCE ACADEMY)
