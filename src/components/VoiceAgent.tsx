@@ -328,6 +328,8 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   };
 
   const stopSession = () => {
+    stopAudioCapture();
+
     if (sessionRef.current) {
       sessionRef.current.close();
       sessionRef.current = null;
@@ -344,7 +346,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       playbackCtxRef.current.close();
       playbackCtxRef.current = null;
     }
-    stopAudioCapture();
     setIsConnected(false);
     setIsConnecting(false);
     setStatus('Call ended');
@@ -371,7 +372,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
 
       processorRef.current.onaudioprocess = (e) => {
-        if (isMuted || !sessionRef.current) return;
+        if (
+          isMuted ||
+          !sessionRef.current ||
+          typeof sessionRef.current.sendRealtimeInput !== 'function'
+        ) {
+          return;
+        }
+
         const inputData = e.inputBuffer.getChannelData(0);
         
         // Inline PCM conversion for speed
@@ -393,6 +401,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         });
       };
 
+
       sourceRef.current.connect(micGainNodeRef.current);
       micGainNodeRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
@@ -402,8 +411,11 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   };
 
   const stopAudioCapture = () => {
+    if (processorRef.current) {
+      processorRef.current.onaudioprocess = null;
+      processorRef.current.disconnect();
+    }
     if (sourceRef.current) sourceRef.current.disconnect();
-    if (processorRef.current) processorRef.current.disconnect();
     if (audioContextRef.current) audioContextRef.current.close();
     audioContextRef.current = null;
   };
