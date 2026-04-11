@@ -29,7 +29,12 @@ export const KnowledgeBaseService = {
   },
 
   async deleteKnowledgeItem(id: string) {
-    await deleteDoc(doc(db, 'knowledge_base', id));
+    try {
+      await deleteDoc(doc(db, 'knowledge_base', id));
+    } catch (error) {
+      console.error('Full error object:', error);
+      throw error;
+    }
   },
 
   async extractTextFromPdf(file: File): Promise<string> {

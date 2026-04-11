@@ -6,6 +6,7 @@ import KnowledgeBaseManager from './components/KnowledgeBaseManager';
 import KnowledgeBaseAnalyzer from './components/KnowledgeBaseAnalyzer';
 import VoiceCloner from './components/VoiceCloner';
 import PersonaSelector from './components/PersonaSelector';
+import IntroManager from './components/IntroManager';
 import { KnowledgeItem, VoiceProfile, VoicePersona } from './types';
 import { LogIn, LogOut, Settings, Phone, LayoutDashboard, Loader2, ShieldCheck, Users, Mic } from 'lucide-react';
 import { cn } from './lib/utils';
@@ -20,6 +21,8 @@ export default function App() {
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
   const [activeVoiceProfile, setActiveVoiceProfile] = useState<VoiceProfile | null>(null);
   const [activePersona, setActivePersona] = useState<VoicePersona | null>(VOICE_PERSONAS[0]);
+  const [language, setLanguage] = useState<'hindi' | 'english'>('hindi');
+  const [intro, setIntro] = useState<string>('Jai Hind, Main Warriors Defence Academy se baat kar rahi hoon, aapka call aaya tha, aapko koi information chahiye thi?');
 
   useEffect(() => {
     const fetchKnowledge = async () => {
@@ -169,6 +172,8 @@ export default function App() {
                 knowledgeItems={knowledgeItems} 
                 voiceProfile={activeVoiceProfile}
                 selectedPersona={activePersona}
+                language={language}
+                intro={intro}
               />
             </div>
           </div>
@@ -187,7 +192,14 @@ export default function App() {
             
             <VoiceCloner onUpdate={setActiveVoiceProfile} />
             
-            <PersonaSelector selectedPersona={activePersona} onSelect={setActivePersona} />
+            <IntroManager intro={intro} onUpdate={setIntro} />
+            
+            <PersonaSelector 
+              selectedPersona={activePersona} 
+              onSelect={setActivePersona}
+              language={language}
+              onLanguageChange={setLanguage}
+            />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="p-8 bg-white rounded-3xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow space-y-4">

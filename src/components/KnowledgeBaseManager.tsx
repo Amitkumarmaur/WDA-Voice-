@@ -3,6 +3,7 @@ import { KnowledgeBaseService } from '../services/knowledgeBaseService';
 import { KnowledgeItem } from '../types';
 import { FileText, Link, Plus, Trash2, Loader2, Globe, FileUp, X, Music } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { auth } from '../lib/firebase';
 
 interface KnowledgeBaseManagerProps {
   onUpdate: (items: KnowledgeItem[]) => void;
@@ -89,13 +90,20 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
     }
   };
 
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this knowledge source?')) return;
+    if (!auth.currentUser) {
+      alert('You must be logged in to delete items.');
+      return;
+    }
     try {
       await KnowledgeBaseService.deleteKnowledgeItem(id);
+      setItemToDelete(null);
       await loadItems();
     } catch (error) {
       console.error('Failed to delete item:', error);
+      alert(`Failed to delete item: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -195,12 +203,19 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
                   <p className="text-xs text-slate-500">{item.type.toUpperCase()} • {item.source}</p>
                 </div>
               </div>
-              <button
-                onClick={() => handleDelete(item.id!)}
-                className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Trash2 size={18} />
-              </button>
+              {itemToDelete === item.id ? (
+                <div className="flex items-center space-x-2">
+                  <button onClick={() => handleDelete(item.id!)} className="text-xs text-rose-600 font-bold hover:underline">Yes</button>
+                  <button onClick={() => setItemToDelete(null)} className="text-xs text-slate-500 hover:underline">No</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setItemToDelete(item.id!)}
+                  className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
             </div>
           ))
         )}

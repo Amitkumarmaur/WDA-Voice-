@@ -3,6 +3,7 @@ import { VoiceService } from '../services/voiceService';
 import { VoiceProfile } from '../types';
 import { Mic, Upload, Loader2, CheckCircle, Trash2, Info, User } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { auth } from '../lib/firebase';
 
 interface VoiceClonerProps {
   onUpdate: (profile: VoiceProfile | null) => void;
@@ -47,16 +48,23 @@ export default function VoiceCloner({ onUpdate }: VoiceClonerProps) {
     }
   };
 
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
   const handleDelete = async () => {
+    if (!auth.currentUser) {
+      alert('You must be logged in to remove voice profiles.');
+      return;
+    }
     if (!activeProfile?.id) return;
-    if (!confirm('Are you sure you want to remove this voice profile?')) return;
     
     try {
       await VoiceService.deleteVoiceProfile(activeProfile.id);
       setActiveProfile(null);
+      setShowConfirmDelete(false);
       onUpdate(null);
     } catch (error) {
       console.error('Failed to delete profile:', error);
+      alert(`Failed to delete profile: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -73,12 +81,19 @@ export default function VoiceCloner({ onUpdate }: VoiceClonerProps) {
           </div>
         </div>
         {activeProfile && (
-          <button
-            onClick={handleDelete}
-            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-          >
-            <Trash2 size={20} />
-          </button>
+          showConfirmDelete ? (
+            <div className="flex items-center space-x-2">
+              <button onClick={handleDelete} className="text-xs text-rose-600 font-bold hover:underline">Yes</button>
+              <button onClick={() => setShowConfirmDelete(false)} className="text-xs text-slate-500 hover:underline">No</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowConfirmDelete(true)}
+              className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+            >
+              <Trash2 size={20} />
+            </button>
+          )
         )}
       </div>
 
