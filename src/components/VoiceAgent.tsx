@@ -400,7 +400,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         const base64Data = btoa(binary);
 
         try {
-          if (sessionRef.current && isConnectedRef.current && isCapturingRef.current && sessionRef.current.connectionState === 'connected') {
+          const isSessionReady = sessionRef.current && isConnectedRef.current && isCapturingRef.current && (
+            sessionRef.current.connectionState === 'connected' ||
+            sessionRef.current?.connection?.readyState === 1 ||
+            sessionRef.current?.ws?.readyState === 1 ||
+            sessionRef.current?.socket?.readyState === 1
+          );
+
+          if (isSessionReady) {
             sessionRef.current.sendRealtimeInput({
               audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
             });
