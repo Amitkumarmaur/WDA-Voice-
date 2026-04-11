@@ -22,7 +22,13 @@ export default function App() {
   const [activeVoiceProfile, setActiveVoiceProfile] = useState<VoiceProfile | null>(null);
   const [activePersona, setActivePersona] = useState<VoicePersona | null>(VOICE_PERSONAS[0]);
   const [language, setLanguage] = useState<'hindi' | 'english'>('hindi');
-  const [intro, setIntro] = useState<string>('Jai Hind, Main Warriors Defence Academy se baat kar rahi hoon, aapka call aaya tha, aapko koi information chahiye thi?');
+  const [intro, setIntro] = useState<string>(() => {
+    return localStorage.getItem('voiceAgent_intro') || 'Jai Hind, Main Warriors Defence Academy se baat kar rahi hoon, aapka call aaya tha, aapko koi information chahiye thi?';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('voiceAgent_intro', intro);
+  }, [intro]);
 
   useEffect(() => {
     const fetchKnowledge = async () => {
