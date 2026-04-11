@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
 import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { GEMINI_API_KEY } from '../lib/config';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -63,8 +62,15 @@ const transferToHumanDeclaration: FunctionDeclaration = {
 
 export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPersona, language, intro }: VoiceAgentProps) {
   const [isConnected, setIsConnected] = useState(false);
+  const isConnectedRef = useRef(false);
+
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
+
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const isCapturingRef = useRef(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_playbackSpeed');
     return saved ? parseFloat(saved) : 1;
@@ -152,10 +158,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     setStatus('Initializing AI engine...');
     
     try {
-      if (!GEMINI_API_KEY) {
-        throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY in environment variables and rebuild.');
-      }
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      console.log('GEMINI_API_KEY:', apiKey);
+      const ai = new GoogleGenAI({ apiKey: apiKey! });
       
       const systemInstruction = `
         # PERSONA: ALEX (WARRIORS DEFENCE ACADEMY)
@@ -332,8 +337,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   };
 
   const stopSession = () => {
-    stopAudioCapture();
-
     if (sessionRef.current) {
       sessionRef.current.close();
       sessionRef.current = null;
@@ -350,6 +353,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       playbackCtxRef.current.close();
       playbackCtxRef.current = null;
     }
+    stopAudioCapture();
     setIsConnected(false);
     setIsConnecting(false);
     setStatus('Call ended');
@@ -376,23 +380,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
 
       processorRef.current.onaudioprocess = (e) => {
-        if (
-          isMuted ||
-          !sessionRef.current ||
-          typeof sessionRef.current.sendRealtimeInput !== 'function'
-        ) {
-          return;
-        }
-
-        const readyState =
-          sessionRef.current?.connection?.readyState ||
-          sessionRef.current?.ws?.readyState ||
-          sessionRef.current?.socket?.readyState;
-
-        if (typeof readyState === 'number' && readyState !== 1) {
-          return;
-        }
-
+        if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
         const inputData = e.inputBuffer.getChannelData(0);
         
         // Inline PCM conversion for speed
@@ -410,57 +398,33 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         const base64Data = btoa(binary);
 
         try {
-          sessionRef.current.sendRealtimeInput({
-            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-          });
+          if (sessionRef.current && isConnectedRef.current && isCapturingRef.current && sessionRef.current.connectionState === 'connected') {
+            sessionRef.current.sendRealtimeInput({
+              audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+            });
+          }
         } catch (error) {
-          console.warn('Realtime input failed after session closed:', error);
-          stopSession();
+          console.warn('Failed to send audio data:', error);
         }
       };
-
 
       sourceRef.current.connect(micGainNodeRef.current);
       micGainNodeRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
+      isCapturingRef.current = true;
     } catch (error) {
       console.error('Microphone access denied:', error);
     }
   };
 
   const stopAudioCapture = () => {
+    isCapturingRef.current = false;
     if (processorRef.current) {
       processorRef.current.onaudioprocess = null;
-      try {
-        processorRef.current.disconnect();
-      } catch (error) {
-        console.warn('Failed to disconnect processor:', error);
-      }
-      processorRef.current = null;
+      processorRef.current.disconnect();
     }
-    if (sourceRef.current) {
-      try {
-        sourceRef.current.disconnect();
-      } catch (error) {
-        console.warn('Failed to disconnect source:', error);
-      }
-      sourceRef.current = null;
-    }
-    if (micGainNodeRef.current) {
-      try {
-        micGainNodeRef.current.disconnect();
-      } catch (error) {
-        console.warn('Failed to disconnect gain node:', error);
-      }
-      micGainNodeRef.current = null;
-    }
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-      } catch (error) {
-        console.warn('Failed to close audio context:', error);
-      }
-    }
+    if (sourceRef.current) sourceRef.current.disconnect();
+    if (audioContextRef.current) audioContextRef.current.close();
     audioContextRef.current = null;
   };
 
