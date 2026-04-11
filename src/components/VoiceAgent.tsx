@@ -269,6 +269,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         callbacks: {
           onopen: async () => {
             console.log('VoiceAgent: live session opened');
+            console.log('VoiceAgent: session object', sessionRef.current);
             setIsConnected(true);
             isConnectedRef.current = true;
             setStatus('Establishing audio stream...');
@@ -406,24 +407,18 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         const base64Data = btoa(binary);
 
         try {
-          const isSessionReady = sessionRef.current && isConnectedRef.current && isCapturingRef.current && (
-            sessionRef.current.connectionState === 'connected' ||
-            sessionRef.current?.connection?.readyState === 1 ||
-            sessionRef.current?.ws?.readyState === 1 ||
-            sessionRef.current?.socket?.readyState === 1
-          );
+          const canSendAudio = sessionRef.current && isConnectedRef.current && isCapturingRef.current && typeof sessionRef.current.sendRealtimeInput === 'function';
 
-          if (isSessionReady) {
+          if (canSendAudio) {
             console.log('VoiceAgent: sending audio chunk', { length: base64Data.length });
             sessionRef.current.sendRealtimeInput({
               audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
             });
           } else {
-            console.log('VoiceAgent: session not ready for audio', {
+            console.log('VoiceAgent: cannot send audio yet', {
               isConnected: isConnectedRef.current,
               isCapturing: isCapturingRef.current,
-              connectionState: sessionRef.current?.connectionState,
-              readyState: sessionRef.current?.connection?.readyState || sessionRef.current?.ws?.readyState || sessionRef.current?.socket?.readyState
+              hasSendMethod: typeof sessionRef.current?.sendRealtimeInput === 'function'
             });
           }
         } catch (error) {
