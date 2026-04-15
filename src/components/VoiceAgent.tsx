@@ -437,7 +437,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       if (audioContextRef.current.audioWorklet) {
         let workletNode: AudioWorkletNode | null = null;
         try {
-          await audioContextRef.current.audioWorklet.addModule(new URL('./audioCaptureProcessor.ts', import.meta.url));
+          await audioContextRef.current.audioWorklet.addModule(new URL('./audioCaptureProcessor.js', import.meta.url).href);
           workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-capture-processor', {
             numberOfInputs: 1,
             numberOfOutputs: 1,
