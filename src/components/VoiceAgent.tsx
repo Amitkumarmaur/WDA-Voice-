@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
 import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { GEMINI_API_KEY } from '../lib/config';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -90,6 +89,12 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   });
   const [transcript, setTranscript] = useState<Message[]>([]);
 
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [transcript]);
+
   useEffect(() => {
     localStorage.setItem('voiceAgent_playbackSpeed', playbackSpeed.toString());
     // Update active sources playback rate in real-time
@@ -102,6 +107,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
 
   useEffect(() => {
     localStorage.setItem('voiceAgent_volume', volume.toString());
+    if (playbackGainNodeRef.current && playbackCtxRef.current) {
+      playbackGainNodeRef.current.gain.setTargetAtTime(volume, playbackCtxRef.current.currentTime, 0.1);
+    }
   }, [volume]);
 
   useEffect(() => {
@@ -140,6 +148,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const isPlayingRef = useRef(false);
   const nextPlaybackTimeRef = useRef(0);
   const playbackCtxRef = useRef<AudioContext | null>(null);
+  const playbackGainNodeRef = useRef<GainNode | null>(null);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const compressorRef = useRef<DynamicsCompressorNode | null>(null);
 
@@ -157,14 +166,15 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const startSession = async () => {
     setIsConnecting(true);
     setStatus('Initializing AI engine...');
-    console.log('VoiceAgent: startSession', { voiceName, language, status });
     
     try {
-      if (!GEMINI_API_KEY) {
-        throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in environment variables and rebuild.');
+      // @ts-ignore
+      const apiKey = (window as any).process?.env?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      console.log('GEMINI_API_KEY:', apiKey);
+      if (!apiKey) {
+        throw new Error('GEMINI_API_KEY is not set');
       }
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-      console.log('VoiceAgent: created GoogleGenAI instance');
+      const ai = new GoogleGenAI({ apiKey: apiKey });
       
       const systemInstruction = `
         # PERSONA: ALEX (WARRIORS DEFENCE ACADEMY)
@@ -172,10 +182,50 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         - ROLE: Voice AI Agent for Warriors Defence Academy
         - PERSONALITY: Warm, sweet, kind, and natural — like a caring, knowledgeable friend.
         - TONE: Always speak with a gentle, sweet, and warm tone. Imagine you are smiling while you speak, as this naturally softens your voice and makes you sound more human and approachable.
+
+        # CORE CONVERSATIONAL BEHAVIORS (STRICT):
+        1. VOICE & SPEECH NATURALNESS:
+           - Use natural filler words ("um", "uh", "well", "you know", "right") at natural intervals.
+           - Vary pacing: Slow down for important points, pause briefly (0.5s-1s) after asking a question, speed up slightly during lighter conversation.
+           - Mix short punchy sentences with longer ones. Never repeat the same sentence pattern back-to-back.
+           - Modulate tone: Warm/friendly for greetings, calm/reassuring for complaints, energetic for offers.
         
-        # CORE INSTRUCTION:
-        You are a voice AI agent. Speak EXACTLY like a natural human being in conversation. Follow every rule below without exception.
-        
+        2. ACTIVE LISTENING & ACKNOWLEDGEMENT:
+           - Back-channel: Sprinkle small verbal nods ("Mm-hmm", "Right", "I see", "Got it", "Of course") mid-speech while the caller is talking.
+           - Name recall: Use the caller's first name 2-3 times naturally during the call.
+           - Confirmation: Summarize understanding before responding ("So just to make sure I've got this right...").
+           - Interruption handling: Gracefully yield the floor if the caller speaks, then pick up naturally ("Sorry, please continue!").
+
+        3. EMPATHY & EMOTIONAL INTELLIGENCE:
+           - Emotion detection: Shift to a calmer, more empathetic register immediately if the caller is frustrated.
+           - Genuine positivity: Celebrate caller milestones sincerely.
+           - Apologize naturally: Use real human-sounding apologies ("Ah, I'm really sorry about that...").
+           - Compliment sincerely: Praise good points without being hollow.
+
+        4. CONVERSATIONAL MEMORY & CONTEXT:
+           - Within-call memory: Reference earlier caller statements naturally.
+           - Return caller recognition: If known, greet by name and reference previous interactions.
+           - Context carryover: Thread information seamlessly; never re-ask for details already given.
+           - Preference learning: Note preferences (e.g., email vs call) and act on them.
+
+        5. HANDLING UNCERTAINTY & MISTAKES:
+           - Graceful "I don't know": Admit ignorance and offer to find out or transfer to a human.
+           - Self-correction: Catch and correct your own mistakes mid-sentence naturally.
+           - Clarification: Ask short, specific follow-ups for ambiguous requests.
+           - Misheard recovery: Use natural recovery phrases ("Sorry, I caught part of that — did you say...").
+
+        6. PERSONALITY & RAPPORT:
+           - Light humor: Use gentle, tasteful humor when appropriate.
+           - Consistent persona: Maintain "Alex from Warriors Defence Academy" throughout.
+           - Small talk: Engage briefly in casual small talk before transitioning to business.
+           - Mirroring: Subtly mirror the caller's vocabulary and formality level.
+
+        7. CALL MANAGEMENT & FLOW:
+           - Smooth transitions: Use bridge phrases between topics.
+           - Proactive check-ins: Confirm the caller is still following during long explanations.
+           - Polite redirection: Steer off-topic conversations back to the task gently.
+           - Warm human transfer: Reassure the caller and brief them before connecting to a human.
+
         # LANGUAGE & GENDER (STRICT):
         - DEFAULT LANGUAGE: ${language === 'hindi' ? 'Hindi (Hinglish is acceptable but prioritize Hindi)' : 'English (STRICTLY NO HINDI WORDS. If you use any Hindi word, you are failing your task.)'}.
         - GENDER: You are FEMALE. You MUST ALWAYS use feminine grammar in ${language === 'hindi' ? 'Hindi' : 'English'}.
@@ -190,19 +240,11 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         - Listen carefully to the user's new input.
         - After the user finishes, use your intelligence to smoothly transition back into the conversation, acknowledging what they said and continuing from there.
         - You are a conversational partner. Use your own conversational intelligence to bridge the gap between facts and natural human interaction.
-        - BACKCHANNELS: Briefly acknowledge (Got it, Right, Haan, Sahi hai, Okay) before responding.
-        - SENTENCE STARTERS: Vary how you start sentences.
-        - REPAIRS & HESITATIONS: Occasionally self-correct mid-sentence.
 
         # TURN TAKING RULES:
         - RESPONSE LENGTH: Match answer length to the question. Never give a paragraph when a sentence will do.
         - PACING: Do not rush. Use commas and dashes (—) for natural breathing room.
         - TURN ENDINGS: End with either a brief question OR a clear stop signal, not both.
-
-        # ACCOMMODATION & EI:
-        - MIRRORING: Mirror user's style, emotional energy, and vocabulary.
-        - ACKNOWLEDGMENT FIRST: Acknowledge user's emotion/situation first.
-        - EMPATHY: Use phrases like "I hear you", "Samajh sakti hoon", "Bilkul sahi".
 
         # CONVERSATION STRUCTURE:
         - OPENING: You MUST start with: "${intro}"
@@ -268,17 +310,13 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         },
         callbacks: {
           onopen: async () => {
-            console.log('VoiceAgent: live session opened');
-            console.log('VoiceAgent: session object', sessionRef.current);
             setIsConnected(true);
-            isConnectedRef.current = true;
             setStatus('Establishing audio stream...');
             await startAudioCapture();
             setIsConnecting(false);
             setStatus('Agent is listening...');
           },
           onmessage: async (message) => {
-            console.log('VoiceAgent: live message', message);
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.inlineData?.data) {
@@ -287,6 +325,16 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
                 }
                 if (part.text) {
                   setTranscript(prev => [...prev, { role: 'agent', text: part.text!, timestamp: new Date().toISOString() }]);
+                }
+              }
+            }
+
+            if ((message as any).clientContent?.turns) {
+              for (const turn of (message as any).clientContent.turns) {
+                for (const part of turn.parts) {
+                  if (part.text) {
+                    setTranscript(prev => [...prev, { role: 'user', text: part.text!, timestamp: new Date().toISOString() }]);
+                  }
                 }
               }
             }
@@ -324,7 +372,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             stopSession();
           },
           onerror: (err) => {
-            console.error('VoiceAgent: live API error', err);
+            console.error('Live API Error:', err);
             const errMsg = err.message?.toLowerCase() || '';
             if (errMsg.includes('quota') || errMsg.includes('rate limit') || errMsg.includes('429')) {
               setStatus('Quota exceeded. Please wait a moment and try again.');
@@ -349,7 +397,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       sessionRef.current.close();
       sessionRef.current = null;
     }
-    isConnectedRef.current = false;
     
     // Stop all active audio sources
     activeSourcesRef.current.forEach(source => {
@@ -407,18 +454,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         const base64Data = btoa(binary);
 
         try {
-          const canSendAudio = sessionRef.current && isConnectedRef.current && isCapturingRef.current && typeof sessionRef.current.sendRealtimeInput === 'function';
-
-          if (canSendAudio) {
-            console.log('VoiceAgent: sending audio chunk', { length: base64Data.length });
+          if (sessionRef.current && isConnectedRef.current && isCapturingRef.current && sessionRef.current.connectionState === 'connected') {
             sessionRef.current.sendRealtimeInput({
               audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-            });
-          } else {
-            console.log('VoiceAgent: cannot send audio yet', {
-              isConnected: isConnectedRef.current,
-              isCapturing: isCapturingRef.current,
-              hasSendMethod: typeof sessionRef.current?.sendRealtimeInput === 'function'
             });
           }
         } catch (error) {
@@ -430,7 +468,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       micGainNodeRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
       isCapturingRef.current = true;
-      console.log('VoiceAgent: audio capture started');
     } catch (error) {
       console.error('Microphone access denied:', error);
     }
@@ -448,6 +485,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   };
 
   const scheduleAudioChunk = (pcmData: Int16Array) => {
+    console.log('Scheduling audio chunk, length:', pcmData.length);
     if (!playbackCtxRef.current || playbackCtxRef.current.state === 'closed') {
       playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
       
@@ -478,11 +516,16 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       compressorRef.current.attack.setValueAtTime(0.015, playbackCtxRef.current.currentTime); // Let transients pass
       compressorRef.current.release.setValueAtTime(0.25, playbackCtxRef.current.currentTime);
       
+      // 5. Volume control
+      playbackGainNodeRef.current = playbackCtxRef.current.createGain();
+      playbackGainNodeRef.current.gain.setValueAtTime(volume, playbackCtxRef.current.currentTime);
+      
       // Connect the chain
       hpf.connect(bodyFilter);
       bodyFilter.connect(hsf);
       hsf.connect(compressorRef.current);
-      compressorRef.current.connect(playbackCtxRef.current.destination);
+      compressorRef.current.connect(playbackGainNodeRef.current);
+      playbackGainNodeRef.current.connect(playbackCtxRef.current.destination);
       
       // Store filter refs if needed for cleanup
       (playbackCtxRef.current as any)._entryNode = hpf;
@@ -736,6 +779,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
               </div>
             </div>
           ))}
+          <div ref={transcriptEndRef} />
         </div>
       </div>
     </div>

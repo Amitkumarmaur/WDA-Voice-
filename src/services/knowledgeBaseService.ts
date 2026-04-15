@@ -3,7 +3,6 @@ import { db } from '../lib/firebase';
 import { KnowledgeItem } from '../types';
 import * as pdfjs from 'pdfjs-dist';
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_API_KEY } from '../lib/config';
 
 // @ts-ignore - Vite handles this import
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -54,10 +53,7 @@ export const KnowledgeBaseService = {
   },
 
   async transcribeAudio(file: File): Promise<string> {
-    if (!GEMINI_API_KEY) {
-      throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in environment variables and rebuild.');
-    }
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = btoa(
       new Uint8Array(arrayBuffer)

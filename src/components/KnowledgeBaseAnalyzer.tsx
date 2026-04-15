@@ -3,7 +3,6 @@ import { GoogleGenAI } from "@google/genai";
 import { Sparkles, Loader2, Send, Bot, User } from 'lucide-react';
 import { KnowledgeItem } from '../types';
 import { cn } from '../lib/utils';
-import { GEMINI_API_KEY } from '../lib/config';
 
 interface KnowledgeBaseAnalyzerProps {
   knowledgeItems: KnowledgeItem[];
@@ -20,10 +19,7 @@ export default function KnowledgeBaseAnalyzer({ knowledgeItems }: KnowledgeBaseA
     setResponse('');
 
     try {
-      if (!GEMINI_API_KEY) {
-        throw new Error('Missing Gemini API key. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in environment variables and rebuild.');
-      }
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const context = knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n\n');
       
       const result = await ai.models.generateContent({
