@@ -312,6 +312,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         callbacks: {
           onopen: async () => {
             setIsConnected(true);
+            isConnectedRef.current = true;
             setStatus('Establishing audio stream...');
             await startAudioCapture();
             setIsConnecting(false);
@@ -456,7 +457,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           processorRef.current.port.onmessage = (event) => {
             if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
             const pcmData = new Int16Array(event.data);
-            if (sessionRef.current && isConnectedRef.current && sessionRef.current.connectionState === 'connected') {
+            if (sessionRef.current && isConnectedRef.current) {
               try {
                 const bytes = new Uint8Array(pcmData.buffer);
                 let binary = '';
@@ -488,7 +489,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             const base64Data = btoa(binary);
 
             try {
-              if (sessionRef.current && isConnectedRef.current && sessionRef.current.connectionState === 'connected') {
+              if (sessionRef.current && isConnectedRef.current) {
                 sessionRef.current.sendRealtimeInput({
                   audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                 });
@@ -516,7 +517,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           const base64Data = btoa(binary);
 
           try {
-            if (sessionRef.current && isConnectedRef.current && sessionRef.current.connectionState === 'connected') {
+            if (sessionRef.current && isConnectedRef.current) {
               sessionRef.current.sendRealtimeInput({
                 audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
               });
