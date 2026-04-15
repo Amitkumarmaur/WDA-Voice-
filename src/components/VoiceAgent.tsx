@@ -139,6 +139,15 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   useEffect(() => {
     localStorage.setItem('voiceAgent_voiceName', voiceName);
   }, [voiceName]);
+
+  useEffect(() => {
+    if (voiceProfile?.recommendedVoice) {
+      const recommended = BEAUTIFUL_VOICES.find(v => v.engine.toLowerCase() === voiceProfile.recommendedVoice.toLowerCase());
+      if (recommended) {
+        setVoiceName(recommended.id);
+      }
+    }
+  }, [voiceProfile]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<AudioWorkletNode | ScriptProcessorNode | null>(null);
@@ -262,9 +271,11 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         - No contractions (ALWAYS use contractions).
 
         # VOICE DELIVERY HINTS:
-        - Use — for natural mid-sentence breaths.
-        - Use ... when thinking or trailing off.
-        - Use commas for spoken rhythm.
+        - Speak like a real human conversation partner: warm, natural, and gently expressive.
+        - Use short natural pauses, slight breaths, and small filler phrases like "hmm", "okay", "right", "you know" where a person would pause.
+        - Vary sentence length and rhythm; do not sound flat, monotone, or overly precise.
+        - Use commas and dashes for breathing room, and ellipses when you are thinking or trailing off.
+        - When answering, keep your tone warm, caring, and conversational, as if you are smiling.
 
         ${voiceProfile ? `
         # VOICE PROFILE:
@@ -287,16 +298,20 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       const session = await ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
-          responseModalities: [Modality.AUDIO],
+          responseModalities: [Modality.AUDIO, Modality.TEXT],
           systemInstruction,
-          temperature: 0.7,
+          temperature: 0.8,
           speechConfig: {
-            voiceConfig: { 
-              prebuiltVoiceConfig: { 
+            voiceConfig: {
+              prebuiltVoiceConfig: {
                 voiceName: voiceProfile?.recommendedVoice || selectedPersona?.voiceName || BEAUTIFUL_VOICES.find(v => v.id === voiceName)?.engine || 'Aoede'
-              } 
-            }
-          },
+              }
+            },
+            speakingRate: 1.0,
+            pitch: 0,
+            volumeGainDb: 0,
+            style: 'conversational'
+          } as any,
           // @ts-ignore - Based on the provided architecture document
           enable_affective_dialog: true,
           tools: [
@@ -387,6 +402,17 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       });
 
       sessionRef.current = session;
+      sessionRef.current.sendClientContent({
+        turns: [
+          {
+            role: 'user',
+            parts: [
+              { text: 'Hello' }
+            ]
+          }
+        ],
+        turnComplete: true
+      });
     } catch (error) {
       console.error('Failed to start session:', error);
       setIsConnecting(false);
@@ -791,7 +817,14 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       <div className="w-full space-y-4 relative z-10 mt-8">
         {!isConnected && (
           <div className="space-y-4 mb-8">
-            <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Voice Style</p>
+            <div className="text-center space-y-1">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Voice Style</p>
+              {voiceProfile?.recommendedVoice ? (
+                <p className="text-sm text-slate-500">Recommended for this sample: <span className="font-semibold text-slate-700">{voiceProfile.recommendedVoice}</span></p>
+              ) : (
+                <p className="text-sm text-slate-500">Pick the most natural-sounding voice for your conversation.</p>
+              )}
+            </div>
             <div className="flex flex-wrap justify-center gap-2">
               {BEAUTIFUL_VOICES.map((v) => (
                 <button
@@ -805,6 +838,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
                   )}
                 >
                   <span>{v.label}</span>
+                  {voiceProfile?.recommendedVoice?.toLowerCase() === v.engine.toLowerCase() ? (
+                    <span className="mt-1 text-[10px] text-emerald-600 font-bold">Best match</span>
+                  ) : null}
                 </button>
               ))}
             </div>
