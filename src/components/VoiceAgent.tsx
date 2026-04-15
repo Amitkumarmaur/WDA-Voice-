@@ -70,6 +70,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [captureHealth, setCaptureHealth] = useState<string | null>(null);
   const isCapturingRef = useRef(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_playbackSpeed');
@@ -140,7 +141,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   }, [voiceName]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef = useRef<AudioWorkletNode | ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micGainNodeRef = useRef<GainNode | null>(null);
   const sessionRef = useRef<any>(null);
@@ -432,41 +433,103 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       
       micGainNodeRef.current = audioContextRef.current.createGain();
       micGainNodeRef.current.gain.value = micGain;
-      
-      processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
 
-      processorRef.current.onaudioprocess = (e) => {
-        if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Inline PCM conversion for speed
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
-        }
-        
-        // Inline Base64 conversion for speed
-        let binary = '';
-        const bytes = new Uint8Array(pcmData.buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64Data = btoa(binary);
-
+      if (audioContextRef.current.audioWorklet) {
+        let workletNode: AudioWorkletNode | null = null;
         try {
-          if (sessionRef.current && isConnectedRef.current && isCapturingRef.current && sessionRef.current.connectionState === 'connected') {
-            sessionRef.current.sendRealtimeInput({
-              audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-            });
-          }
+          await audioContextRef.current.audioWorklet.addModule(new URL('./audioCaptureProcessor.ts', import.meta.url));
+          workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-capture-processor', {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            outputChannelCount: [1],
+            channelCount: 1,
+          });
+          processorRef.current = workletNode;
+          setCaptureHealth('AudioWorklet capture enabled');
         } catch (error) {
-          console.warn('Failed to send audio data:', error);
+          console.warn('AudioWorklet module failed, falling back to ScriptProcessorNode:', error);
+          processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
+          setCaptureHealth('AudioWorklet unavailable; using fallback capture');
         }
-      };
+
+        if (processorRef.current instanceof AudioWorkletNode) {
+          processorRef.current.port.onmessage = (event) => {
+            if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
+            const pcmData = new Int16Array(event.data);
+            if (sessionRef.current && isConnectedRef.current && sessionRef.current.connectionState === 'connected') {
+              try {
+                const bytes = new Uint8Array(pcmData.buffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) {
+                  binary += String.fromCharCode(bytes[i]);
+                }
+                const base64Data = btoa(binary);
+                sessionRef.current.sendRealtimeInput({
+                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                });
+              } catch (error) {
+                console.warn('Failed to send audio data:', error);
+              }
+            }
+          };
+        } else {
+          processorRef.current.onaudioprocess = (e) => {
+            if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            const pcmData = new Int16Array(inputData.length);
+            for (let i = 0; i < inputData.length; i++) {
+              pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+            }
+            let binary = '';
+            const bytes = new Uint8Array(pcmData.buffer);
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            const base64Data = btoa(binary);
+
+            try {
+              if (sessionRef.current && isConnectedRef.current && sessionRef.current.connectionState === 'connected') {
+                sessionRef.current.sendRealtimeInput({
+                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                });
+              }
+            } catch (error) {
+              console.warn('Failed to send audio data:', error);
+            }
+          };
+        }
+      } else {
+        processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
+        setCaptureHealth('AudioWorklet unsupported; using fallback capture');
+        processorRef.current.onaudioprocess = (e) => {
+          if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
+          const inputData = e.inputBuffer.getChannelData(0);
+          const pcmData = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+          }
+          let binary = '';
+          const bytes = new Uint8Array(pcmData.buffer);
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64Data = btoa(binary);
+
+          try {
+            if (sessionRef.current && isConnectedRef.current && sessionRef.current.connectionState === 'connected') {
+              sessionRef.current.sendRealtimeInput({
+                audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+              });
+            }
+          } catch (error) {
+            console.warn('Failed to send audio data:', error);
+          }
+        };
+      }
 
       sourceRef.current.connect(micGainNodeRef.current);
-      micGainNodeRef.current.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
+      micGainNodeRef.current.connect(processorRef.current!);
+      processorRef.current!.connect(audioContextRef.current.destination);
       isCapturingRef.current = true;
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -476,7 +539,11 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const stopAudioCapture = () => {
     isCapturingRef.current = false;
     if (processorRef.current) {
-      processorRef.current.onaudioprocess = null;
+      if ('port' in processorRef.current) {
+        processorRef.current.port.onmessage = null;
+      } else {
+        processorRef.current.onaudioprocess = null;
+      }
       processorRef.current.disconnect();
     }
     if (sourceRef.current) sourceRef.current.disconnect();
@@ -622,6 +689,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         )}>
           {status}
         </p>
+        {captureHealth ? (
+          <p className="text-xs text-slate-500 mt-1">{captureHealth}</p>
+        ) : null}
       </div>
 
       <div className={cn("relative z-10", isConnected ? "mb-32" : "")}>
