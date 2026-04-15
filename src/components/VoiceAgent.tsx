@@ -154,6 +154,23 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micGainNodeRef = useRef<GainNode | null>(null);
   const sessionRef = useRef<any>(null);
+
+  const isSessionOpen = () => {
+    const readyState = sessionRef.current?.conn?.readyState;
+    return !!sessionRef.current && isConnectedRef.current && readyState === WebSocket.OPEN;
+  };
+
+  const sendRealtimeAudio = (base64Data: string) => {
+    if (isMuted || !isSessionOpen()) return;
+    try {
+      sessionRef.current.sendRealtimeInput({
+        audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+      });
+    } catch (error) {
+      console.warn('Realtime audio send skipped because session is not open:', error);
+    }
+  };
+
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const nextPlaybackTimeRef = useRef(0);
@@ -481,27 +498,20 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
 
         if (processorRef.current instanceof AudioWorkletNode) {
           processorRef.current.port.onmessage = (event) => {
-            if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
+            if (!isCapturingRef.current) return;
             const pcmData = new Int16Array(event.data);
-            if (sessionRef.current && isConnectedRef.current) {
-              try {
-                const bytes = new Uint8Array(pcmData.buffer);
-                let binary = '';
-                for (let i = 0; i < bytes.byteLength; i++) {
-                  binary += String.fromCharCode(bytes[i]);
-                }
-                const base64Data = btoa(binary);
-                sessionRef.current.sendRealtimeInput({
-                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-                });
-              } catch (error) {
-                console.warn('Failed to send audio data:', error);
-              }
+            if (!isSessionOpen()) return;
+            const bytes = new Uint8Array(pcmData.buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binary += String.fromCharCode(bytes[i]);
             }
+            const base64Data = btoa(binary);
+            sendRealtimeAudio(base64Data);
           };
         } else {
           processorRef.current.onaudioprocess = (e) => {
-            if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
+            if (!isCapturingRef.current) return;
             const inputData = e.inputBuffer.getChannelData(0);
             const pcmData = new Int16Array(inputData.length);
             for (let i = 0; i < inputData.length; i++) {
@@ -513,16 +523,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
               binary += String.fromCharCode(bytes[i]);
             }
             const base64Data = btoa(binary);
-
-            try {
-              if (sessionRef.current && isConnectedRef.current) {
-                sessionRef.current.sendRealtimeInput({
-                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-                });
-              }
-            } catch (error) {
-              console.warn('Failed to send audio data:', error);
-            }
+            sendRealtimeAudio(base64Data);
           };
         }
       } else {
