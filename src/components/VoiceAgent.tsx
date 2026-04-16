@@ -156,7 +156,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const sessionRef = useRef<any>(null);
 
   const isSessionOpen = () => {
-    const readyState = sessionRef.current?.conn?.readyState;
+    const readyState = sessionRef.current?.conn?.readyState ?? sessionRef.current?.readyState;
     return !!sessionRef.current && isConnectedRef.current && readyState === WebSocket.OPEN;
   };
 
@@ -349,6 +349,22 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             await startAudioCapture();
             setIsConnecting(false);
             setStatus('Agent is listening...');
+
+            try {
+              sessionRef.current?.sendClientContent({
+                turns: [
+                  {
+                    role: 'user',
+                    parts: [
+                      { text: 'Hello' }
+                    ]
+                  }
+                ],
+                turnComplete: true
+              });
+            } catch (error) {
+              console.error('Failed to send initial client content:', error);
+            }
           },
           onmessage: async (message) => {
             if (message.serverContent?.modelTurn?.parts) {
@@ -419,17 +435,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       });
 
       sessionRef.current = session;
-      sessionRef.current.sendClientContent({
-        turns: [
-          {
-            role: 'user',
-            parts: [
-              { text: 'Hello' }
-            ]
-          }
-        ],
-        turnComplete: true
-      });
     } catch (error) {
       console.error('Failed to start session:', error);
       setIsConnecting(false);
