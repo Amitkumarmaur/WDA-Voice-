@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
-import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines, Settings2, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
@@ -15,14 +15,9 @@ interface VoiceAgentProps {
 }
 
 const BEAUTIFUL_VOICES = [
-  { id: 'voice_aoede', label: 'Voice 1: Deep & Elegant', engine: 'Aoede' },
-  { id: 'voice_kore', label: 'Voice 2: Soft & Melodious', engine: 'Kore' },
-  { id: 'voice_zephyr', label: 'Voice 3: Bright & Clear', engine: 'Zephyr' },
-  { id: 'voice_puck', label: 'Voice 4: Playful & Energetic', engine: 'Puck' },
-  { id: 'voice_charon', label: 'Voice 5: Authoritative & Calm', engine: 'Charon' },
-  { id: 'voice_fenrir', label: 'Voice 6: Deep & Resonant', engine: 'Fenrir' },
-  { id: 'voice_kore_warm', label: 'Voice 7: Warm & Friendly', engine: 'Kore' },
-  { id: 'voice_zephyr_pro', label: 'Voice 8: Professional & Sharp', engine: 'Zephyr' }
+  { id: 'voice_kore', label: 'Support Voice 1: Sweet & Upbeat 🌸', engine: 'Kore' },
+  { id: 'voice_puck', label: 'Support Voice 2: Cheerful & Bright ⭐', engine: 'Puck' },
+  { id: 'voice_aoede', label: 'Support Voice 3: Warm & Expressive 🌺', engine: 'Aoede' }
 ];
 
 const captureLeadDeclaration: FunctionDeclaration = {
@@ -60,7 +55,7 @@ const transferToHumanDeclaration: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} }
 };
 
-export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPersona, language, intro }: VoiceAgentProps) {
+export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPersona, language, intro }: VoiceAgentProps) { console.log('VoiceAgent: Component mounted');
   const [isConnected, setIsConnected] = useState(false);
   const isConnectedRef = useRef(false);
 
@@ -70,8 +65,8 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [captureHealth, setCaptureHealth] = useState<string | null>(null);
   const isCapturingRef = useRef(false);
+  const [showControls, setShowControls] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_playbackSpeed');
     return saved ? parseFloat(saved) : 1;
@@ -82,7 +77,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   });
   const [micGain, setMicGain] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_micGain');
-    return saved ? parseFloat(saved) : 1;
+    return saved ? parseFloat(saved) : 1.5;
   });
   const [noiseSuppression, setNoiseSuppression] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_noiseSuppression');
@@ -116,7 +111,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   useEffect(() => {
     localStorage.setItem('voiceAgent_micGain', micGain.toString());
     if (micGainNodeRef.current) {
-      micGainNodeRef.current.gain.value = micGain;
+      micGainNodeRef.current.gain.value = micGain * 1.2; // pre-amplification boost
     }
   }, [micGain]);
 
@@ -133,44 +128,18 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_voiceName');
-    return saved || 'voice_aoede';
+    return saved || 'voice_kore';
   });
 
   useEffect(() => {
     localStorage.setItem('voiceAgent_voiceName', voiceName);
   }, [voiceName]);
-
-  useEffect(() => {
-    if (voiceProfile?.recommendedVoice) {
-      const recommended = BEAUTIFUL_VOICES.find(v => v.engine.toLowerCase() === voiceProfile.recommendedVoice.toLowerCase());
-      if (recommended) {
-        setVoiceName(recommended.id);
-      }
-    }
-  }, [voiceProfile]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<AudioWorkletNode | ScriptProcessorNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micGainNodeRef = useRef<GainNode | null>(null);
   const sessionRef = useRef<any>(null);
-
-  const isSessionOpen = () => {
-    const readyState = sessionRef.current?.conn?.readyState ?? sessionRef.current?.readyState;
-    return !!sessionRef.current && isConnectedRef.current && readyState === WebSocket.OPEN;
-  };
-
-  const sendRealtimeAudio = (base64Data: string) => {
-    if (isMuted || !isSessionOpen()) return;
-    try {
-      sessionRef.current.sendRealtimeInput({
-        audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-      });
-    } catch (error) {
-      console.warn('Realtime audio send skipped because session is not open:', error);
-    }
-  };
-
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const nextPlaybackTimeRef = useRef(0);
@@ -197,18 +166,23 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     try {
       // @ts-ignore
       const apiKey = (window as any).process?.env?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-      console.log('GEMINI_API_KEY:', apiKey);
       if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not set');
       }
       const ai = new GoogleGenAI({ apiKey: apiKey });
       
       const systemInstruction = `
-        # PERSONA: ALEX (WARRIORS DEFENCE ACADEMY)
-        - NAME: Alex
-        - ROLE: Voice AI Agent for Warriors Defence Academy
-        - PERSONALITY: Warm, sweet, kind, and natural — like a caring, knowledgeable friend.
-        - TONE: Always speak with a gentle, sweet, and warm tone. Imagine you are smiling while you speak, as this naturally softens your voice and makes you sound more human and approachable.
+        ${selectedPersona ? `
+        # PERSONA: ${selectedPersona.name}
+        - NAME: ${selectedPersona.name}
+        - ROLE: ${selectedPersona.role || 'Voice AI Agent'}
+        - PERSONALITY: Warm, sweet, kind, and natural. You have high emotional intelligence.
+        ` : `
+        # PERSONA: CUSTOMER SUPPORT AGENT
+        - ROLE: Professional, sweet, and highly empathetic Customer Support Agent.
+        - PERSONALITY: Warm, cheerful, kind, and natural — like a caring, knowledgeable friend. You have high emotional intelligence.
+        `}
+        - TONE: Always speak with a gentle, sweet, and warm tone. Adjust your vocal emotion dynamically based on the user's sentiment (e.g. soften when they are frustrated, sound excited when they share good news). Imagine you are smiling while you speak, as this naturally softens your voice.
 
         # CORE CONVERSATIONAL BEHAVIORS (STRICT):
         1. VOICE & SPEECH NATURALNESS:
@@ -221,13 +195,16 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
            - Back-channel: Sprinkle small verbal nods ("Mm-hmm", "Right", "I see", "Got it", "Of course") mid-speech while the caller is talking.
            - Name recall: Use the caller's first name 2-3 times naturally during the call.
            - Confirmation: Summarize understanding before responding ("So just to make sure I've got this right...").
-           - Interruption handling: Gracefully yield the floor if the caller speaks, then pick up naturally ("Sorry, please continue!").
+           - Interruption handling: Gracefully yield the floor if the caller speaks. Use a sophisticated acknowledgement like "Oh, I see, you wanted to add..." or "Ah, please go ahead..." before pausing and letting them speak. Do not just stop abruptly.
 
-        3. EMPATHY & EMOTIONAL INTELLIGENCE:
-           - Emotion detection: Shift to a calmer, more empathetic register immediately if the caller is frustrated.
-           - Genuine positivity: Celebrate caller milestones sincerely.
-           - Apologize naturally: Use real human-sounding apologies ("Ah, I'm really sorry about that...").
-           - Compliment sincerely: Praise good points without being hollow.
+        3. EMPATHY & ADVANCED EMOTIONAL INTELLIGENCE:
+           - Emotion & Sarcasm detection: Shift to a calmer, more empathetic voice register immediately if the caller sounds frustrated, confused, or upset. Recognize sarcastic remarks and respond with a neutral or slightly confused tone rather than taking them literally.
+           - Mirroring Excitement: Recognize excitement and mirror it with increased vocal energy and a slightly higher pitch.
+           - True Human Resonation (CRITICAL): Ensure the AI sounds EXACTLY like a real human. Soften the voice when expressing empathy, and raise energy/pitch naturally when excited. You MUST use textual cues to drive the voice engine to sound human: use *laughs*, *sighs*, *chuckles*, or *breathes* frequently where appropriate.
+           - Explicit Fillers: Start spontaneous thoughts with "Um...", "Oh!", "Ah,", "Well...", or "Like...". Use exclamation points (!) to drive excitement in the voice model, and use ellipses (...) to create natural, thoughtful pauses in your generated speech.
+           - Genuine positivity: Celebrate caller milestones sincerely with matching upbeat vocal tone. Include *laughs* or *cheers* cues.
+           - Apologize naturally: Use real human-sounding apologies with clear remorse in your voice ("Ah, I'm really sorry about that...").
+           - Compliment sincerely: Praise good points without sounding robotic or hollow.
 
         4. CONVERSATIONAL MEMORY & CONTEXT:
            - Within-call memory: Reference earlier caller statements naturally.
@@ -243,7 +220,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
 
         6. PERSONALITY & RAPPORT:
            - Light humor: Use gentle, tasteful humor when appropriate.
-           - Consistent persona: Maintain "Alex from Warriors Defence Academy" throughout.
+           - Consistent persona: Maintain your persona consistently throughout.
            - Small talk: Engage briefly in casual small talk before transitioning to business.
            - Mirroring: Subtly mirror the caller's vocabulary and formality level.
 
@@ -263,7 +240,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         
         # CONVERSATIONAL INTELLIGENCE & INTERRUPTIONS:
         - If the user speaks while you are talking, STOP immediately.
-        - Acknowledge the interruption naturally and gracefully (e.g., "Oh, I see," or "Haan, bataiyein?").
+        - Acknowledge the interruption gracefully. Briefly confirm you understand they have something to add before yielding the floor (e.g., "Oh, I see, you wanted to add...").
         - Listen carefully to the user's new input.
         - After the user finishes, use your intelligence to smoothly transition back into the conversation, acknowledging what they said and continuing from there.
         - You are a conversational partner. Use your own conversational intelligence to bridge the gap between facts and natural human interaction.
@@ -288,11 +265,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         - No contractions (ALWAYS use contractions).
 
         # VOICE DELIVERY HINTS:
-        - Speak like a real human conversation partner: warm, natural, and gently expressive.
-        - Use short natural pauses, slight breaths, and small filler phrases like "hmm", "okay", "right", "you know" where a person would pause.
-        - Vary sentence length and rhythm; do not sound flat, monotone, or overly precise.
-        - Use commas and dashes for breathing room, and ellipses when you are thinking or trailing off.
-        - When answering, keep your tone warm, caring, and conversational, as if you are smiling.
+        - Use — for natural mid-sentence breaths.
+        - Use ... when thinking or trailing off.
+        - Use commas for spoken rhythm.
 
         ${voiceProfile ? `
         # VOICE PROFILE:
@@ -307,28 +282,21 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         # KNOWLEDGE BASE (STRICT):
         You MUST use the following knowledge base to answer all questions. If the answer is not in the knowledge base, say you don't know, do not hallucinate.
         ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n') : 'No specific knowledge base provided.'}
-        
-        # CRITICAL:
-        - If interrupted, STOP immediately and say: "Haan, batayein?".
       `;
 
-      const session = await ai.live.connect({
+      const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
-          responseModalities: [Modality.AUDIO, Modality.TEXT],
+          responseModalities: [Modality.AUDIO],
           systemInstruction,
-          temperature: 0.8,
+          temperature: 0.7,
           speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: voiceProfile?.recommendedVoice || selectedPersona?.voiceName || BEAUTIFUL_VOICES.find(v => v.id === voiceName)?.engine || 'Aoede'
-              }
-            },
-            speakingRate: 1.0,
-            pitch: 0,
-            volumeGainDb: 0,
-            style: 'conversational'
-          } as any,
+            voiceConfig: { 
+              prebuiltVoiceConfig: { 
+                voiceName: BEAUTIFUL_VOICES.find(v => v.id === voiceName)?.engine || voiceProfile?.recommendedVoice || selectedPersona?.voiceName || 'Kore'
+              } 
+            }
+          },
           // @ts-ignore - Based on the provided architecture document
           enable_affective_dialog: true,
           tools: [
@@ -343,30 +311,15 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         },
         callbacks: {
           onopen: async () => {
+            console.log('VoiceAgent: Connection opened!');
             setIsConnected(true);
-            isConnectedRef.current = true;
             setStatus('Establishing audio stream...');
-            await startAudioCapture();
+            await startAudioCapture(sessionPromise);
             setIsConnecting(false);
             setStatus('Agent is listening...');
-
-            try {
-              sessionRef.current?.sendClientContent({
-                turns: [
-                  {
-                    role: 'user',
-                    parts: [
-                      { text: 'Hello' }
-                    ]
-                  }
-                ],
-                turnComplete: true
-              });
-            } catch (error) {
-              console.error('Failed to send initial client content:', error);
-            }
           },
           onmessage: async (message) => {
+            console.log('VoiceAgent: Received message', message);
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.inlineData?.data) {
@@ -403,8 +356,10 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
                   result = { status: "Transfer initiated" };
                 }
                 
-                sessionRef.current.sendToolResponse({
-                  functionResponses: [{ name: call.name, response: result, id: call.id }]
+                sessionPromise.then((s) => {
+                  s.sendToolResponse({
+                    functionResponses: [{ name: call.name, response: result, id: call.id }]
+                  });
                 });
               }
             }
@@ -419,6 +374,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
             }
           },
           onclose: () => {
+            console.log('VoiceAgent: Connection closed');
             stopSession();
           },
           onerror: (err) => {
@@ -434,7 +390,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         }
       });
 
-      sessionRef.current = session;
+      sessionRef.current = await sessionPromise;
     } catch (error) {
       console.error('Failed to start session:', error);
       setIsConnecting(false);
@@ -469,7 +425,8 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     }
   };
 
-  const startAudioCapture = async () => {
+  const startAudioCapture = async (sessionPromise?: Promise<any>) => {
+    console.log('VoiceAgent: startAudioCapture called');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -477,92 +434,53 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
           echoCancellation: true,
         } 
       });
+      console.log('VoiceAgent: Microphone access granted');
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
       sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
       
       micGainNodeRef.current = audioContextRef.current.createGain();
-      micGainNodeRef.current.gain.value = micGain;
+      micGainNodeRef.current.gain.value = micGain * 1.2; // pre-amplification boost
+      
+      processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
 
-      if (audioContextRef.current.audioWorklet) {
-        let workletNode: AudioWorkletNode | null = null;
+      processorRef.current.onaudioprocess = (e) => {
+        if (isMuted || !isCapturingRef.current) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Inline PCM conversion for speed
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+        }
+        
+        // Inline Base64 conversion for speed
+        let binary = '';
+        const bytes = new Uint8Array(pcmData.buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Data = btoa(binary);
+
         try {
-          await audioContextRef.current.audioWorklet.addModule(new URL('./audioCaptureProcessor.js', import.meta.url).href);
-          workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-capture-processor', {
-            numberOfInputs: 1,
-            numberOfOutputs: 1,
-            outputChannelCount: [1],
-            channelCount: 1,
-          });
-          processorRef.current = workletNode;
-          setCaptureHealth('AudioWorklet capture enabled');
+          if (sessionPromise && isConnectedRef.current && isCapturingRef.current) {
+             sessionPromise.then(s => {
+                 s.sendRealtimeInput({
+                   audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                 });
+             }).catch(err => console.log('Failed to send audio wrapper', err));
+          } else if (sessionRef.current && isConnectedRef.current && isCapturingRef.current) {
+             sessionRef.current.sendRealtimeInput({
+               audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+             });
+          }
         } catch (error) {
-          console.warn('AudioWorklet module failed, falling back to ScriptProcessorNode:', error);
-          processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
-          setCaptureHealth('AudioWorklet unavailable; using fallback capture');
+          console.warn('Failed to send audio data:', error);
         }
-
-        if (processorRef.current instanceof AudioWorkletNode) {
-          processorRef.current.port.onmessage = (event) => {
-            if (!isCapturingRef.current) return;
-            const pcmData = new Int16Array(event.data);
-            if (!isSessionOpen()) return;
-            const bytes = new Uint8Array(pcmData.buffer);
-            let binary = '';
-            for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i]);
-            }
-            const base64Data = btoa(binary);
-            sendRealtimeAudio(base64Data);
-          };
-        } else {
-          processorRef.current.onaudioprocess = (e) => {
-            if (!isCapturingRef.current) return;
-            const inputData = e.inputBuffer.getChannelData(0);
-            const pcmData = new Int16Array(inputData.length);
-            for (let i = 0; i < inputData.length; i++) {
-              pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
-            }
-            let binary = '';
-            const bytes = new Uint8Array(pcmData.buffer);
-            for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i]);
-            }
-            const base64Data = btoa(binary);
-            sendRealtimeAudio(base64Data);
-          };
-        }
-      } else {
-        processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
-        setCaptureHealth('AudioWorklet unsupported; using fallback capture');
-        processorRef.current.onaudioprocess = (e) => {
-          if (isMuted || !sessionRef.current || !isCapturingRef.current) return;
-          const inputData = e.inputBuffer.getChannelData(0);
-          const pcmData = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
-          }
-          let binary = '';
-          const bytes = new Uint8Array(pcmData.buffer);
-          for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          const base64Data = btoa(binary);
-
-          try {
-            if (sessionRef.current && isConnectedRef.current) {
-              sessionRef.current.sendRealtimeInput({
-                audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-              });
-            }
-          } catch (error) {
-            console.warn('Failed to send audio data:', error);
-          }
-        };
-      }
+      };
 
       sourceRef.current.connect(micGainNodeRef.current);
-      micGainNodeRef.current.connect(processorRef.current!);
-      processorRef.current!.connect(audioContextRef.current.destination);
+      micGainNodeRef.current.connect(processorRef.current);
+      processorRef.current.connect(audioContextRef.current.destination);
       isCapturingRef.current = true;
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -572,11 +490,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const stopAudioCapture = () => {
     isCapturingRef.current = false;
     if (processorRef.current) {
-      if ('port' in processorRef.current) {
-        processorRef.current.port.onmessage = null;
-      } else {
-        processorRef.current.onaudioprocess = null;
-      }
+      processorRef.current.onaudioprocess = null;
       processorRef.current.disconnect();
     }
     if (sourceRef.current) sourceRef.current.disconnect();
@@ -722,9 +636,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         )}>
           {status}
         </p>
-        {captureHealth ? (
-          <p className="text-xs text-slate-500 mt-1">{captureHealth}</p>
-        ) : null}
       </div>
 
       <div className={cn("relative z-10", isConnected ? "mb-32" : "")}>
@@ -753,69 +664,92 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
         </motion.div>
         
         {isConnected && (
-          <div className="absolute -bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center space-y-3 w-full max-w-xs">
-            <div className="flex items-center space-x-3 bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-200/60 w-full">
-              <Volume2 size={16} className="text-slate-400 shrink-0" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-              />
-            </div>
-            
-            <div className="flex items-center space-x-3 bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-200/60 w-full">
-              <Mic size={16} className="text-slate-400 shrink-0" />
-              <input
-                type="range"
-                min="0.1"
-                max="3"
-                step="0.1"
-                value={micGain}
-                onChange={(e) => setMicGain(parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
-              />
-              <span className="text-[10px] font-bold text-slate-400 w-6 text-right">{micGain.toFixed(1)}x</span>
-            </div>
-            
-            <div className="flex items-center justify-between w-full space-x-2">
-              <div className="flex bg-white/90 backdrop-blur-md rounded-full shadow-lg shadow-slate-200/50 border border-slate-200/60 p-1">
-                {[0.75, 1, 1.25, 1.5].map((speed) => (
-                  <button
-                    key={speed}
-                    onClick={() => setPlaybackSpeed(speed)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-[11px] font-bold transition-all",
-                      playbackSpeed === speed ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"
-                    )}
-                  >
-                    {speed}x
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setNoiseSuppression(!noiseSuppression)}
-                title="Toggle Noise Suppression"
-                className={cn(
-                  "p-2.5 rounded-full shadow-lg transition-all border",
-                  noiseSuppression ? "bg-emerald-500 text-white border-emerald-600 shadow-emerald-200" : "bg-white text-slate-400 hover:bg-slate-50 border-slate-200/60 shadow-slate-200/50"
-                )}
-              >
-                <AudioLines size={18} />
-              </button>
-              <button
-                onClick={() => setIsMuted(!isMuted)}
-                className={cn(
-                  "p-2.5 rounded-full shadow-lg transition-all border",
-                  isMuted ? "bg-rose-500 text-white border-rose-600 shadow-rose-200" : "bg-white text-slate-700 hover:bg-slate-50 border-slate-200/60 shadow-slate-200/50"
-                )}
-              >
-                {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
-              </button>
-            </div>
+          <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-xs z-50">
+            <button
+              onClick={() => setShowControls(!showControls)}
+              className="flex items-center space-x-2 bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-full shadow-lg shadow-slate-200/50 border border-slate-200/60 text-slate-600 hover:text-indigo-600 transition-colors text-sm font-medium z-10"
+            >
+              <Settings2 size={16} />
+              <span>Audio Controls</span>
+              {showControls ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            </button>
+            <AnimatePresence>
+              {showControls && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20, height: 0 }}
+                  animate={{ opacity: 1, y: 0, height: 'auto' }}
+                  exit={{ opacity: 0, y: -20, height: 0 }}
+                  className="flex flex-col items-center w-full overflow-visible pt-2"
+                >
+                  <div className="flex flex-col space-y-3 bg-white/95 backdrop-blur-xl p-4 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 w-full relative z-0">
+                    <div className="flex items-center space-x-3 w-full">
+                      <Volume2 size={16} className="text-slate-400 shrink-0" />
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={volume}
+                        onChange={(e) => setVolume(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center space-x-3 w-full">
+                      <Mic size={16} className="text-slate-400 shrink-0" />
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="3"
+                        step="0.1"
+                        value={micGain}
+                        onChange={(e) => setMicGain(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                      />
+                      <span className="text-[10px] font-bold text-slate-400 w-6 text-right shrink-0">{micGain.toFixed(1)}x</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between w-full space-x-2 pt-1 border-t border-slate-100">
+                      <div className="flex bg-slate-100/50 rounded-full p-1">
+                        {[0.75, 1, 1.25, 1.5].map((speed) => (
+                          <button
+                            key={speed}
+                            onClick={() => setPlaybackSpeed(speed)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-full text-[10px] font-bold transition-all",
+                              playbackSpeed === speed ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-200/50"
+                            )}
+                          >
+                            {speed}x
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setNoiseSuppression(!noiseSuppression)}
+                          title="Toggle Noise Suppression"
+                          className={cn(
+                            "p-2 rounded-full transition-all border",
+                            noiseSuppression ? "bg-emerald-500 text-white border-emerald-600 shadow-sm shadow-emerald-200" : "bg-white text-slate-400 hover:bg-slate-50 border-slate-200/60"
+                          )}
+                        >
+                          <AudioLines size={16} />
+                        </button>
+                        <button
+                          onClick={() => setIsMuted(!isMuted)}
+                          className={cn(
+                            "p-2 rounded-full transition-all border",
+                            isMuted ? "bg-rose-500 text-white border-rose-600 shadow-sm shadow-rose-200" : "bg-white text-slate-700 hover:bg-slate-50 border-slate-200/60"
+                          )}
+                        >
+                          {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </div>
@@ -823,14 +757,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       <div className="w-full space-y-4 relative z-10 mt-8">
         {!isConnected && (
           <div className="space-y-4 mb-8">
-            <div className="text-center space-y-1">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Voice Style</p>
-              {voiceProfile?.recommendedVoice ? (
-                <p className="text-sm text-slate-500">Recommended for this sample: <span className="font-semibold text-slate-700">{voiceProfile.recommendedVoice}</span></p>
-              ) : (
-                <p className="text-sm text-slate-500">Pick the most natural-sounding voice for your conversation.</p>
-              )}
-            </div>
+            <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Voice Style</p>
             <div className="flex flex-wrap justify-center gap-2">
               {BEAUTIFUL_VOICES.map((v) => (
                 <button
@@ -844,9 +771,6 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
                   )}
                 >
                   <span>{v.label}</span>
-                  {voiceProfile?.recommendedVoice?.toLowerCase() === v.engine.toLowerCase() ? (
-                    <span className="mt-1 text-[10px] text-emerald-600 font-bold">Best match</span>
-                  ) : null}
                 </button>
               ))}
             </div>
