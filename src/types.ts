@@ -18,6 +18,7 @@ export interface VoicePersona {
   description: string;
   voiceName: string;
   systemInstruction: string;
+  role?: string;
 }
 
 export interface Message {

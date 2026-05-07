@@ -1,0 +1,24 @@
+# https://supabase.com/docs/guides/cli/config
+
+project_id = "wda-voice"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[functions.gemini-live-token]
+verify_jwt = false
+
+[functions.gemini-generate]
+verify_jwt = false
+
+[functions.stripe-checkout]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.contact-form]
+verify_jwt = false

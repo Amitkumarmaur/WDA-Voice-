@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80" role="img">
+  <title>Voicera — AI Voice Agent</title>
+  <desc>Voicera wordmark with animated sound wave</desc>
+  <defs>
+    <style>
+      .vr-word {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-weight: 500;
+        font-size: 40px;
+        letter-spacing: -1.4px;
+        fill: #111111;
+      }
+      .b1  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.00s; transform-origin: 230px 58px; }
+      .b2  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.10s; transform-origin: 236px 58px; }
+      .b3  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.20s; transform-origin: 242px 58px; }
+      .b4  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.30s; transform-origin: 248px 58px; }
+      .b5  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.40s; transform-origin: 254px 58px; }
+      .b6  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.50s; transform-origin: 260px 58px; }
+      .b7  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.40s; transform-origin: 266px 58px; }
+      .b8  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.30s; transform-origin: 272px 58px; }
+      .b9  { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.20s; transform-origin: 278px 58px; }
+      .b10 { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.10s; transform-origin: 284px 58px; }
+      .b11 { animation: wave 1.4s ease-in-out infinite; animation-delay: 0.00s; transform-origin: 290px 58px; }
+      @keyframes wave {
+        0%, 100% { transform: scaleY(0.25); opacity: 0.35; }
+        50%       { transform: scaleY(1);    opacity: 1; }
+      }
+    </style>
+  </defs>
+
+  <text
+    x="0"
+    y="56"
+    class="vr-word"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="40"
+    font-weight="500"
+    fill="#111111"
+  >Voice<tspan fill="#ff5600" font-size="40" font-weight="500">ra</tspan></text>
+
+  <rect class="b1"  x="228" y="50" width="3" height="8"  rx="1.5" fill="#111111"/>
+  <rect class="b2"  x="234" y="44" width="3" height="14" rx="1.5" fill="#111111"/>
+  <rect class="b3"  x="240" y="40" width="3" height="18" rx="1.5" fill="#111111"/>
+  <rect class="b4"  x="246" y="36" width="3" height="22" rx="1.5" fill="#ff5600"/>
+  <rect class="b5"  x="252" y="33" width="3" height="25" rx="1.5" fill="#ff5600"/>
+  <rect class="b6"  x="258" y="30" width="3" height="28" rx="1.5" fill="#ff5600"/>
+  <rect class="b7"  x="264" y="33" width="3" height="25" rx="1.5" fill="#ff5600"/>
+  <rect class="b8"  x="270" y="36" width="3" height="22" rx="1.5" fill="#111111"/>
+  <rect class="b9"  x="276" y="40" width="3" height="18" rx="1.5" fill="#111111"/>
+  <rect class="b10" x="282" y="44" width="3" height="14" rx="1.5" fill="#111111"/>
+  <rect class="b11" x="288" y="50" width="3" height="8"  rx="1.5" fill="#111111"/>
+
+  <text
+    x="0"
+    y="75"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="11"
+    font-weight="400"
+    fill="#626260"
+  >Every missed call, answered.</text>
+</svg>

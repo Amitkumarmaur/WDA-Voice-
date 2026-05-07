@@ -5,6 +5,14 @@ import { cn } from '../lib/utils';
 import { BusinessService } from '../services/businessService';
 import { KnowledgeItem, Message, VoiceProfile, VoicePersona } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import type { TenantRef } from '../lib/tenantContext';
+import { useTenant } from '../lib/tenantContext';
+import { getSupabase, getSupabaseUrl, isSupabaseEnvConfigured } from '../lib/supabase';
+import {
+  GEMINI_LIVE_MODEL,
+  GEMINI_LIVE_UI_VOICES,
+  normalizeGeminiLiveVoice,
+} from '../config/geminiLive';
 
 interface VoiceAgentProps {
   knowledgeItems: KnowledgeItem[];
@@ -12,13 +20,11 @@ interface VoiceAgentProps {
   selectedPersona?: VoicePersona | null;
   language: 'hindi' | 'english';
   intro: string;
+  /** When omitted, uses TenantProvider context (if any). */
+  tenant?: TenantRef | null;
 }
 
-const BEAUTIFUL_VOICES = [
-  { id: 'voice_kore', label: 'Support Voice 1: Sweet & Upbeat 🌸', engine: 'Kore' },
-  { id: 'voice_puck', label: 'Support Voice 2: Cheerful & Bright ⭐', engine: 'Puck' },
-  { id: 'voice_aoede', label: 'Support Voice 3: Warm & Expressive 🌺', engine: 'Aoede' }
-];
+const BEAUTIFUL_VOICES = GEMINI_LIVE_UI_VOICES;
 
 const captureLeadDeclaration: FunctionDeclaration = {
   name: "captureLead",
@@ -55,7 +61,21 @@ const transferToHumanDeclaration: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} }
 };
 
-export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPersona, language, intro }: VoiceAgentProps) { console.log('VoiceAgent: Component mounted');
+export default function VoiceAgent({
+  knowledgeItems,
+  voiceProfile,
+  selectedPersona,
+  language,
+  intro,
+  tenant: tenantProp,
+}: VoiceAgentProps) {
+  const tenantFromContext = useTenant();
+  const tenant = tenantProp !== undefined ? tenantProp : tenantFromContext;
+  const tenantRef = useRef(tenant);
+  useEffect(() => {
+    tenantRef.current = tenant;
+  }, [tenant]);
+
   const [isConnected, setIsConnected] = useState(false);
   const isConnectedRef = useRef(false);
 
@@ -84,6 +104,10 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     return saved ? saved === 'true' : true;
   });
   const [transcript, setTranscript] = useState<Message[]>([]);
+  const transcriptSnapshotRef = useRef<Message[]>([]);
+  useEffect(() => {
+    transcriptSnapshotRef.current = transcript;
+  }, [transcript]);
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
@@ -128,12 +152,20 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_voiceName');
-    return saved || 'voice_kore';
+    if (saved && BEAUTIFUL_VOICES.some((v) => v.id === saved)) return saved;
+    return 'voice_kore';
   });
 
   useEffect(() => {
     localStorage.setItem('voiceAgent_voiceName', voiceName);
   }, [voiceName]);
+
+  useEffect(() => {
+    if (!selectedPersona?.voiceName) return;
+    const engine = normalizeGeminiLiveVoice(selectedPersona.voiceName);
+    const entry = BEAUTIFUL_VOICES.find((v) => v.engine === engine);
+    if (entry) setVoiceName(entry.id);
+  }, [selectedPersona?.id, selectedPersona?.voiceName]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -157,19 +189,76 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       stopSession();
       startSession();
     }
-  }, [knowledgeItems, intro]);
+  }, [knowledgeItems, intro, tenant]);
 
   const startSession = async () => {
     setIsConnecting(true);
     setStatus('Initializing AI engine...');
     
     try {
-      // @ts-ignore
-      const apiKey = (window as any).process?.env?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY is not set');
+      if (!isSupabaseEnvConfigured()) {
+        setStatus('Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local (see .env.example), then restart npm run dev.');
+        setIsConnecting(false);
+        return;
       }
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const supabase = getSupabase();
+      let {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        session = refreshed.session ?? session;
+      }
+
+      const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+      let tokenBody: Record<string, string> = {};
+      if (tenant?.mode === 'public') {
+        tokenBody = { public_slug: tenant.slug };
+      } else if (!session?.access_token) {
+        const fromEnv = import.meta.env.VITE_PUBLIC_DEMO_SLUG?.trim();
+        const params = new URLSearchParams(window.location.search);
+        const fromQuery = params.get('demo')?.trim() || params.get('public_slug')?.trim();
+        const demoSlug = fromEnv || fromQuery;
+        if (demoSlug) {
+          tokenBody = { public_slug: demoSlug };
+        }
+      }
+
+      if (!session?.access_token && !tokenBody.public_slug) {
+        setStatus(
+          'Sign in with Business Login first. The voice API needs your account (or a public embed). For a no-login demo, set VITE_PUBLIC_DEMO_SLUG in .env.local to your org public slug, or open this page with ?demo=your-slug.'
+        );
+        setIsConnecting(false);
+        return;
+      }
+
+      const tokenRes = await fetch(`${getSupabaseUrl()}/functions/v1/gemini-live-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: anon,
+          Authorization: `Bearer ${session?.access_token ?? anon}`,
+        },
+        body: JSON.stringify(tokenBody),
+      });
+      const tokenJson = (await tokenRes.json()) as { apiKey?: string; error?: string };
+      if (!tokenRes.ok || !tokenJson.apiKey) {
+        throw new Error(tokenJson.error || 'Failed to get voice session token');
+      }
+      const apiKey = tokenJson.apiKey;
+      const usesEphemeralToken = apiKey.startsWith('auth_tokens/');
+      const ai = new GoogleGenAI({
+        apiKey,
+        ...(usesEphemeralToken
+          ? {
+              httpOptions: {
+                apiVersion: 'v1alpha',
+                baseUrl: 'https://generativelanguage.googleapis.com',
+              },
+            }
+          : {}),
+      });
       
       const systemInstruction = `
         ${selectedPersona ? `
@@ -285,17 +374,22 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       `;
 
       const sessionPromise = ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        model: GEMINI_LIVE_MODEL,
         config: {
           responseModalities: [Modality.AUDIO],
           systemInstruction,
           temperature: 0.7,
           speechConfig: {
-            voiceConfig: { 
-              prebuiltVoiceConfig: { 
-                voiceName: BEAUTIFUL_VOICES.find(v => v.id === voiceName)?.engine || voiceProfile?.recommendedVoice || selectedPersona?.voiceName || 'Kore'
-              } 
-            }
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: normalizeGeminiLiveVoice(
+                  BEAUTIFUL_VOICES.find((v) => v.id === voiceName)?.engine ||
+                    voiceProfile?.recommendedVoice ||
+                    selectedPersona?.voiceName ||
+                    'Kore'
+                ),
+              },
+            },
           },
           // @ts-ignore - Based on the provided architecture document
           enable_affective_dialog: true,
@@ -346,10 +440,10 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
               for (const call of message.toolCall.functionCalls) {
                 let result = {};
                 if (call.name === 'captureLead') {
-                  await BusinessService.captureLead(call.args as any);
+                  await BusinessService.captureLead(tenantRef.current, call.args as any);
                   result = { status: "Lead captured successfully" };
                 } else if (call.name === 'scheduleAppointment') {
-                  await BusinessService.scheduleAppointment(call.args as any);
+                  await BusinessService.scheduleAppointment(tenantRef.current, call.args as any);
                   result = { status: "Appointment scheduled successfully" };
                 } else if (call.name === 'transferToHuman') {
                   setStatus('Transferring to human...');
@@ -420,8 +514,9 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
     setIsConnecting(false);
     setStatus('Call ended');
     
-    if (transcript.length > 0) {
-      BusinessService.saveTranscript(transcript);
+    const snap = transcriptSnapshotRef.current;
+    if (snap.length > 0) {
+      void BusinessService.saveTranscript(tenantRef.current, snap);
     }
   };
 
@@ -630,7 +725,7 @@ export default function VoiceAgent({ knowledgeItems, voiceProfile, selectedPerso
       <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-indigo-50/50 to-transparent pointer-events-none" />
       
       <div className="text-center space-y-2 relative z-10">
-        <h2 className="text-3xl font-display font-bold tracking-tight text-slate-900">AI Voice Agent</h2>
+        <h2 className="text-3xl font-display font-bold tracking-tight text-slate-900">Voicera</h2>
         <p className={cn("text-sm font-medium px-3 py-1 rounded-full inline-block", 
           isConnected ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50" : "bg-slate-100 text-slate-500 border border-slate-200/50"
         )}>

@@ -3,13 +3,14 @@ import { KnowledgeBaseService } from '../services/knowledgeBaseService';
 import { KnowledgeItem } from '../types';
 import { FileText, Link, Plus, Trash2, Loader2, Globe, FileUp, X, Music } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { auth } from '../lib/firebase';
+import { getSupabase } from '../lib/supabase';
 
 interface KnowledgeBaseManagerProps {
+  organizationId: string;
   onUpdate: (items: KnowledgeItem[]) => void;
 }
 
-export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerProps) {
+export default function KnowledgeBaseManager({ organizationId, onUpdate }: KnowledgeBaseManagerProps) {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -17,13 +18,13 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    loadItems();
-  }, []);
+    void loadItems();
+  }, [organizationId]);
 
   const loadItems = async () => {
     setIsLoading(true);
     try {
-      const data = await KnowledgeBaseService.getKnowledgeItems();
+      const data = await KnowledgeBaseService.getKnowledgeItems(organizationId);
       setItems(data);
       onUpdate(data);
     } catch (error) {
@@ -52,11 +53,11 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
         throw new Error('Unsupported file type');
       }
 
-      await KnowledgeBaseService.addKnowledgeItem({
+      await KnowledgeBaseService.addKnowledgeItem(organizationId, {
         title: file.name,
         content,
         source: file.name,
-        type
+        type,
       });
       await loadItems();
     } catch (error) {
@@ -71,14 +72,11 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
     if (!newUrl) return;
     setIsUploading(true);
     try {
-      // For URLs, we'll store the URL itself. 
-      // In a real app, we'd scrape it here or use a backend service.
-      // For now, we'll just store it as a placeholder.
-      await KnowledgeBaseService.addKnowledgeItem({
+      await KnowledgeBaseService.addKnowledgeItem(organizationId, {
         title: new URL(newUrl).hostname,
         content: `Website content from ${newUrl}`,
         source: newUrl,
-        type: 'website'
+        type: 'website',
       });
       setNewUrl('');
       setIsAdding(false);
@@ -93,7 +91,10 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    if (!auth.currentUser) {
+    const {
+      data: { session },
+    } = await getSupabase().auth.getSession();
+    if (!session) {
       alert('You must be logged in to delete items.');
       return;
     }
@@ -115,6 +116,7 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
           <p className="text-sm text-slate-500">Manage the sources your AI agent uses for answers.</p>
         </div>
         <button
+          type="button"
           onClick={() => setIsAdding(!isAdding)}
           className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm"
         >
@@ -136,7 +138,7 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
               <span className="text-sm font-medium text-slate-600">Upload Audio</span>
               <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
             </label>
-            
+
             <div className="flex flex-col space-y-2">
               <div className="flex-1 p-6 bg-white rounded-xl border-2 border-indigo-100 flex flex-col justify-center space-y-3 shadow-sm">
                 <div className="flex items-center space-x-2 text-indigo-600">
@@ -152,7 +154,8 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
                     onChange={(e) => setNewUrl(e.target.value)}
                   />
                   <button
-                    onClick={handleAddUrl}
+                    type="button"
+                    onClick={() => void handleAddUrl()}
                     disabled={isUploading || !newUrl}
                     className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
                   >
@@ -188,28 +191,43 @@ export default function KnowledgeBaseManager({ onUpdate }: KnowledgeBaseManagerP
               className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-md hover:border-indigo-100 transition-all"
             >
               <div className="flex items-center space-x-4">
-                <div className={cn(
-                  "p-3 rounded-xl shadow-sm",
-                  item.type === 'pdf' ? "bg-rose-50 text-rose-600 border border-rose-100" : 
-                  item.type === 'audio' ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                  "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                )}>
-                  {item.type === 'pdf' ? <FileText size={20} /> : 
-                   item.type === 'audio' ? <Music size={20} /> : 
-                   <Globe size={20} />}
+                <div
+                  className={cn(
+                    'p-3 rounded-xl shadow-sm',
+                    item.type === 'pdf'
+                      ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                      : item.type === 'audio'
+                        ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                        : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                  )}
+                >
+                  {item.type === 'pdf' ? (
+                    <FileText size={20} />
+                  ) : item.type === 'audio' ? (
+                    <Music size={20} />
+                  ) : (
+                    <Globe size={20} />
+                  )}
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 line-clamp-1">{item.title}</h4>
-                  <p className="text-xs text-slate-500">{item.type.toUpperCase()} • {item.source}</p>
+                  <p className="text-xs text-slate-500">
+                    {item.type.toUpperCase()} • {item.source}
+                  </p>
                 </div>
               </div>
               {itemToDelete === item.id ? (
                 <div className="flex items-center space-x-2">
-                  <button onClick={() => handleDelete(item.id!)} className="text-xs text-rose-600 font-bold hover:underline">Yes</button>
-                  <button onClick={() => setItemToDelete(null)} className="text-xs text-slate-500 hover:underline">No</button>
+                  <button type="button" onClick={() => void handleDelete(item.id!)} className="text-xs text-rose-600 font-bold hover:underline">
+                    Yes
+                  </button>
+                  <button type="button" onClick={() => setItemToDelete(null)} className="text-xs text-slate-500 hover:underline">
+                    No
+                  </button>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setItemToDelete(item.id!)}
                   className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                 >

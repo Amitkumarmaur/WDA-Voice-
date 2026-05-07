@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { GoogleGenAI } from "@google/genai";
-import { Sparkles, Loader2, Send, Bot, User } from 'lucide-react';
+import { Sparkles, Loader2, Send, Bot } from 'lucide-react';
 import { KnowledgeItem } from '../types';
-import { cn } from '../lib/utils';
+import { getSupabase, getSupabaseUrl } from '../lib/supabase';
 
 interface KnowledgeBaseAnalyzerProps {
   knowledgeItems: KnowledgeItem[];
@@ -19,26 +18,41 @@ export default function KnowledgeBaseAnalyzer({ knowledgeItems }: KnowledgeBaseA
     setResponse('');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const context = knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n\n');
-      
-      const result = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: `
-          You are a business analyst. Use the following knowledge base to answer the user's query or analyze the content.
-          
-          KNOWLEDGE BASE:
-          ${context}
-          
-          USER QUERY:
-          ${query}
-        `,
-      });
+      const supabase = getSupabase();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setResponse('Please sign in to use AI analysis.');
+        return;
+      }
+      const context = knowledgeItems.map((item) => `[${item.type}] ${item.title}: ${item.content}`).join('\n\n');
+      const prompt = `You are a business analyst. Use the following knowledge base to answer the user's query or analyze the content.
 
-      setResponse(result.text || "I couldn't generate an analysis.");
+KNOWLEDGE BASE:
+${context}
+
+USER QUERY:
+${query}`;
+
+      const url = `${getSupabaseUrl()}/functions/v1/gemini-generate`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+        },
+        body: JSON.stringify({ action: 'analyze_kb', prompt }),
+      });
+      const json = (await res.json()) as { text?: string; error?: string };
+      if (!res.ok) {
+        throw new Error(json.error || 'Request failed');
+      }
+      setResponse(json.text || "I couldn't generate an analysis.");
     } catch (error) {
-      console.error("Analysis failed:", error);
-      setResponse("An error occurred during analysis. Please try again.");
+      console.error('Analysis failed:', error);
+      setResponse('An error occurred during analysis. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -65,7 +79,8 @@ export default function KnowledgeBaseAnalyzer({ knowledgeItems }: KnowledgeBaseA
             className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none text-sm"
           />
           <button
-            onClick={handleAnalyze}
+            type="button"
+            onClick={() => void handleAnalyze()}
             disabled={isLoading || !query}
             className="absolute bottom-4 right-4 p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-200"
           >
@@ -79,9 +94,7 @@ export default function KnowledgeBaseAnalyzer({ knowledgeItems }: KnowledgeBaseA
               <Bot size={18} />
               <span className="text-xs font-bold uppercase tracking-wider">Gemini Analysis</span>
             </div>
-            <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {response}
-            </div>
+            <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{response}</div>
           </div>
         )}
       </div>
