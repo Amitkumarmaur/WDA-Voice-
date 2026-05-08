@@ -686,7 +686,29 @@ export default function VoiceAgent({
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
 
-      await audioContext.audioWorklet.addModule(new URL('../audio/gemini-capture.worklet.ts', import.meta.url));
+      // Inline worklet as Blob URL — avoids Vite production bundling issues with AudioWorkletGlobalScope
+      const workletCode = `
+        class GeminiCaptureProcessor extends AudioWorkletProcessor {
+          process(inputs) {
+            const input = inputs[0];
+            if (!input || !input.length) return true;
+            const channelData = input[0];
+            const n = channelData.length;
+            const pcm = new Int16Array(n);
+            for (let i = 0; i < n; i++) {
+              const s = Math.max(-1, Math.min(1, channelData[i]));
+              pcm[i] = (s < 0 ? s * 0x8000 : s * 0x7fff) | 0;
+            }
+            this.port.postMessage(pcm.buffer, [pcm.buffer]);
+            return true;
+          }
+        }
+        registerProcessor('gemini-capture', GeminiCaptureProcessor);
+      `;
+      const blob = new Blob([workletCode], { type: 'application/javascript' });
+      const workletUrl = URL.createObjectURL(blob);
+      await audioContext.audioWorklet.addModule(workletUrl);
+      URL.revokeObjectURL(workletUrl);
 
       const workletNode = new AudioWorkletNode(audioContext, 'gemini-capture', {
         numberOfInputs: 1,
