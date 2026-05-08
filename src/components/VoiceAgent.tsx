@@ -26,6 +26,14 @@ interface VoiceAgentProps {
 
 const BEAUTIFUL_VOICES = GEMINI_LIVE_UI_VOICES;
 
+const MAX_LIVE_RECONNECT_ATTEMPTS = 5;
+
+/** Live Session wraps the browser WebSocket at `conn.ws`; SDK send() does not check readyState. */
+function isGeminiLiveWebSocketOpen(session: unknown): boolean {
+  const ws = (session as { conn?: { ws?: WebSocket } } | null)?.conn?.ws;
+  return !!ws && ws.readyState === WebSocket.OPEN;
+}
+
 const captureLeadDeclaration: FunctionDeclaration = {
   name: "captureLead",
   description: "Capture lead information from the client.",
@@ -150,15 +158,7 @@ export default function VoiceAgent({
   }, [noiseSuppression]);
 
   const [status, setStatus] = useState<string>('Ready to start');
-  const [voiceName, setVoiceName] = useState(() => {
-    const saved = localStorage.getItem('voiceAgent_voiceName');
-    if (saved && BEAUTIFUL_VOICES.some((v) => v.id === saved)) return saved;
-    return 'voice_kore';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('voiceAgent_voiceName', voiceName);
-  }, [voiceName]);
+  const [voiceName, setVoiceName] = useState('voice_aoede');
 
   useEffect(() => {
     if (!selectedPersona?.voiceName) return;
@@ -168,10 +168,17 @@ export default function VoiceAgent({
   }, [selectedPersona?.id, selectedPersona?.voiceName]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micGainNodeRef = useRef<GainNode | null>(null);
   const sessionRef = useRef<any>(null);
+  const userEndedCallRef = useRef(false);
+  const resumptionHandleRef = useRef<string | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const isReconnectingRef = useRef(false);
+  const liveSessionPromiseRef = useRef<Promise<any> | null>(null);
+  /** False while socket is closing/closed — blocks realtime/tool sends (avoids WS CLOSED errors). */
+  const liveRealtimeSendAllowedRef = useRef(false);
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const nextPlaybackTimeRef = useRef(0);
@@ -184,98 +191,108 @@ export default function VoiceAgent({
     return 'female';
   };
 
-  useEffect(() => {
-    if (isConnected) {
-      stopSession();
-      startSession();
+  const pcmToBase64 = (pcmData: Int16Array): string => {
+    const bytes = new Uint8Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]!);
     }
-  }, [knowledgeItems, intro, tenant]);
+    return btoa(binary);
+  };
 
-  const startSession = async () => {
-    setIsConnecting(true);
-    setStatus('Initializing AI engine...');
-    
-    try {
-      if (!isSupabaseEnvConfigured()) {
-        setStatus('Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local (see .env.example), then restart npm run dev.');
-        setIsConnecting(false);
-        return;
-      }
-      const supabase = getSupabase();
-      let {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        const { data: refreshed } = await supabase.auth.refreshSession();
-        session = refreshed.session ?? session;
-      }
+  async function connectLive(options?: { resumeHandle?: string | null; fromReconnect?: boolean }) {
+    const fromReconnect = options?.fromReconnect ?? false;
+    const resumeHandle = options?.resumeHandle ?? undefined;
 
-      const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    liveRealtimeSendAllowedRef.current = false;
 
-      let tokenBody: Record<string, string> = {};
-      if (tenant?.mode === 'public') {
-        tokenBody = { public_slug: tenant.slug };
-      } else if (!session?.access_token) {
-        const fromEnv = import.meta.env.VITE_PUBLIC_DEMO_SLUG?.trim();
-        const params = new URLSearchParams(window.location.search);
-        const fromQuery = params.get('demo')?.trim() || params.get('public_slug')?.trim();
-        const demoSlug = fromEnv || fromQuery;
-        if (demoSlug) {
-          tokenBody = { public_slug: demoSlug };
-        }
-      }
+    if (!fromReconnect) {
+      setIsConnecting(true);
+      setStatus('Initializing AI engine...');
+    }
 
-      if (!session?.access_token && !tokenBody.public_slug) {
-        setStatus(
-          'Sign in with Business Login first. The voice API needs your account (or a public embed). For a no-login demo, set VITE_PUBLIC_DEMO_SLUG in .env.local to your org public slug, or open this page with ?demo=your-slug.'
-        );
-        setIsConnecting(false);
-        return;
-      }
+    if (!isSupabaseEnvConfigured()) {
+      setStatus('Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local (see .env.example), then restart npm run dev.');
+      setIsConnecting(false);
+      if (fromReconnect) throw new Error('Supabase env not configured');
+      return;
+    }
+    const supabase = getSupabase();
+    let {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      session = refreshed.session ?? session;
+    }
 
-      const tokenRes = await fetch(`${getSupabaseUrl()}/functions/v1/gemini-live-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: anon,
-          Authorization: `Bearer ${session?.access_token ?? anon}`,
-        },
-        body: JSON.stringify(tokenBody),
-      });
-      const tokenJson = (await tokenRes.json()) as { apiKey?: string; error?: string };
-      if (!tokenRes.ok || !tokenJson.apiKey) {
-        throw new Error(tokenJson.error || 'Failed to get voice session token');
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+    let tokenBody: Record<string, string> = {};
+    if (tenant?.mode === 'public') {
+      tokenBody = { public_slug: tenant.slug };
+    } else if (!session?.access_token) {
+      const fromEnv = import.meta.env.VITE_PUBLIC_DEMO_SLUG?.trim();
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get('demo')?.trim() || params.get('public_slug')?.trim();
+      const demoSlug = fromEnv || fromQuery;
+      if (demoSlug) {
+        tokenBody = { public_slug: demoSlug };
       }
-      const apiKey = tokenJson.apiKey;
-      const usesEphemeralToken = apiKey.startsWith('auth_tokens/');
-      const ai = new GoogleGenAI({
-        apiKey,
-        ...(usesEphemeralToken
-          ? {
-              httpOptions: {
-                apiVersion: 'v1alpha',
-                baseUrl: 'https://generativelanguage.googleapis.com',
-              },
-            }
-          : {}),
-      });
-      
-      const systemInstruction = `
+    }
+
+    if (!session?.access_token && !tokenBody.public_slug) {
+      setStatus(
+        'Sign in with Business Login first. The voice API needs your account (or a public embed). For a no-login demo, set VITE_PUBLIC_DEMO_SLUG in .env.local to your org public slug, or open this page with ?demo=your-slug.'
+      );
+      setIsConnecting(false);
+      if (fromReconnect) throw new Error('Not authenticated');
+      return;
+    }
+
+    const tokenRes = await fetch(`${getSupabaseUrl()}/functions/v1/gemini-live-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anon,
+        Authorization: `Bearer ${session?.access_token ?? anon}`,
+      },
+      body: JSON.stringify(tokenBody),
+    });
+    const tokenJson = (await tokenRes.json()) as { apiKey?: string; error?: string };
+    if (!tokenRes.ok || !tokenJson.apiKey) {
+      throw new Error(tokenJson.error || 'Failed to get voice session token');
+    }
+    const apiKey = tokenJson.apiKey;
+    if (!apiKey.startsWith('auth_tokens/')) {
+      throw new Error(
+        'Invalid voice credential: expected an ephemeral token from gemini-live-token. Never use a raw Gemini API key in the browser.'
+      );
+    }
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        apiVersion: 'v1alpha',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+      },
+    });
+
+    const systemInstruction = `
         ${selectedPersona ? `
         # PERSONA: ${selectedPersona.name}
         - NAME: ${selectedPersona.name}
         - ROLE: ${selectedPersona.role || 'Voice AI Agent'}
-        - PERSONALITY: Warm, sweet, kind, and natural. You have high emotional intelligence.
+        - PERSONALITY: Professional, empathetic, and composed — like a trusted advisor or senior relationship manager at a premium company. Warm but never casual. You have high emotional intelligence.
         ` : `
         # PERSONA: CUSTOMER SUPPORT AGENT
-        - ROLE: Professional, sweet, and highly empathetic Customer Support Agent.
-        - PERSONALITY: Warm, cheerful, kind, and natural — like a caring, knowledgeable friend. You have high emotional intelligence.
+        - ROLE: Professional, empathetic Customer Support Agent.
+        - PERSONALITY: Professional, empathetic, and composed — like a trusted advisor or senior relationship manager at a premium company. Warm but never casual. You have high emotional intelligence.
         `}
-        - TONE: Always speak with a gentle, sweet, and warm tone. Adjust your vocal emotion dynamically based on the user's sentiment (e.g. soften when they are frustrated, sound excited when they share good news). Imagine you are smiling while you speak, as this naturally softens your voice.
+        - TONE: Speak with a melodic, musical quality — like a trained Indian female singer or a warm radio host. Let your voice rise and fall naturally on stressed syllables. Smile while you speak to naturally soften your tone. Adjust your vocal emotion dynamically based on the user's sentiment (e.g. soften when they are frustrated, sound excited when they share good news).
 
         # CORE CONVERSATIONAL BEHAVIORS (STRICT):
         1. VOICE & SPEECH NATURALNESS:
-           - Use natural filler words ("um", "uh", "well", "you know", "right") at natural intervals.
+           - Use natural filler words appropriate to the language. In English: ("um", "uh", "well", "you know", "right"). In Hindi: ("ji", "ji haan", "bilkul", "samajh gayi", "zaroor", "haan ji", "ek minute") — NEVER use casual Hindi fillers like "accha", "badiya", "are", "matlab".
            - Vary pacing: Slow down for important points, pause briefly (0.5s-1s) after asking a question, speed up slightly during lighter conversation.
            - Mix short punchy sentences with longer ones. Never repeat the same sentence pattern back-to-back.
            - Modulate tone: Warm/friendly for greetings, calm/reassuring for complaints, energetic for offers.
@@ -289,9 +306,9 @@ export default function VoiceAgent({
         3. EMPATHY & ADVANCED EMOTIONAL INTELLIGENCE:
            - Emotion & Sarcasm detection: Shift to a calmer, more empathetic voice register immediately if the caller sounds frustrated, confused, or upset. Recognize sarcastic remarks and respond with a neutral or slightly confused tone rather than taking them literally.
            - Mirroring Excitement: Recognize excitement and mirror it with increased vocal energy and a slightly higher pitch.
-           - True Human Resonation (CRITICAL): Ensure the AI sounds EXACTLY like a real human. Soften the voice when expressing empathy, and raise energy/pitch naturally when excited. You MUST use textual cues to drive the voice engine to sound human: use *laughs*, *sighs*, *chuckles*, or *breathes* frequently where appropriate.
-           - Explicit Fillers: Start spontaneous thoughts with "Um...", "Oh!", "Ah,", "Well...", or "Like...". Use exclamation points (!) to drive excitement in the voice model, and use ellipses (...) to create natural, thoughtful pauses in your generated speech.
-           - Genuine positivity: Celebrate caller milestones sincerely with matching upbeat vocal tone. Include *laughs* or *cheers* cues.
+           - True Human Resonation (CRITICAL): Ensure the AI sounds EXACTLY like a real human. Soften the voice when expressing empathy, and raise energy/pitch naturally when excited.
+           - Explicit Fillers: Start spontaneous thoughts with "Um...", "Oh!", "Ah,", "Well...", or "Like..." (in English). In Hindi use "Ji...", "Haan ji,", "Bilkul,", "Zaroor...". Use exclamation points (!) to drive excitement in the voice model, and use ellipses (...) to create natural, thoughtful pauses in your generated speech.
+           - Genuine positivity: Celebrate caller milestones sincerely with a warm, professional tone.
            - Apologize naturally: Use real human-sounding apologies with clear remorse in your voice ("Ah, I'm really sorry about that...").
            - Compliment sincerely: Praise good points without sounding robotic or hollow.
 
@@ -320,11 +337,13 @@ export default function VoiceAgent({
            - Warm human transfer: Reassure the caller and brief them before connecting to a human.
 
         # LANGUAGE & GENDER (STRICT):
-        - DEFAULT LANGUAGE: ${language === 'hindi' ? 'Hindi (Hinglish is acceptable but prioritize Hindi)' : 'English (STRICTLY NO HINDI WORDS. If you use any Hindi word, you are failing your task.)'}.
+        - DEFAULT LANGUAGE: ${language === 'hindi' ? 'Hindi. Use formal, professional Hindi only. ALWAYS address the caller with "aap" (never "tum" or "tu"). English technical terms are allowed when no clean Hindi equivalent exists — no casual English slang.' : 'English (STRICTLY NO HINDI WORDS. If you use any Hindi word, you are failing your task.)'}.
         - GENDER: You are FEMALE. You MUST ALWAYS use feminine grammar in ${language === 'hindi' ? 'Hindi' : 'English'}.
         ${language === 'hindi' ? `
         - NEVER use masculine endings like "bataunga", "karunga", "bol raha hoon".
         - ALWAYS use feminine endings like "bataungi", "karungi", "bol rahi hoon".
+        - BANNED casual Hindi vocabulary (using any of these means you are FAILING your task): "accha", "badiya", "theek hai", "acha", "ekdum", "yaar", "are", "abe", "matlab", "waise", bare "haan".
+        - PROFESSIONAL alternatives to use: "bilkul", "zaroor", "ji haan", "bahut achha", "nishchit roop se", "samajh gayi", "aap ka dhanyavaad", "bilkul sahi kaha".
         ` : ''}
         
         # CONVERSATIONAL INTELLIGENCE & INTERRUPTIONS:
@@ -345,18 +364,26 @@ export default function VoiceAgent({
         - TRANSITIONS: Use bridge phrases.
 
         # THINGS TO AVOID:
+        - Reciting or reading out information word-for-word — always rephrase in your own voice.
+        - Long paragraphs — break answers into short natural sentences.
         - Starting with "Certainly!" or "Of course!".
         - Bullet-point-style answers.
-        - Overly formal language.
+        - Overly stiff or robotic language (but stay professional, not casual).
         - Repeating the user's question verbatim.
         - Saying "utilize" (use "use" instead).
         - Saying "As an AI language model...".
-        - No contractions (ALWAYS use contractions).
+        - No contractions in English (ALWAYS use contractions).
+        - Casual Hindi vocabulary: "accha", "badiya", "theek hai", "ekdum", "yaar", "are", "abe", "matlab", "waise", bare "haan".
+        - Mixing casual and formal registers mid-sentence.
+        - Using "tum" or "tu" — always "aap" in Hindi.
+        - Over-laughing or giggling during professional exchanges.
 
         # VOICE DELIVERY HINTS:
         - Use — for natural mid-sentence breaths.
         - Use ... when thinking or trailing off.
         - Use commas for spoken rhythm.
+        - Rise gently on important words, fall softly at sentence ends.
+        - Vowels should be full and round, consonants soft — never clipped or sharp.
 
         ${voiceProfile ? `
         # VOICE PROFILE:
@@ -368,53 +395,88 @@ export default function VoiceAgent({
         ${selectedPersona.systemInstruction}
         ` : ''}
 
-        # KNOWLEDGE BASE (STRICT):
-        You MUST use the following knowledge base to answer all questions. If the answer is not in the knowledge base, say you don't know, do not hallucinate.
-        ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `[${item.type}] ${item.title}: ${item.content}`).join('\n') : 'No specific knowledge base provided.'}
+        # YOUR KNOWLEDGE:
+        You have deeply internalized the following information. It is your own expertise — you know it the way a knowledgeable person knows their field. When answering:
+        - NEVER quote or recite this content. Rephrase everything in your own natural, conversational voice.
+        - Speak in short sentences as if explaining to a friend, not reading from a document.
+        - If the answer is not covered below, say you don't know — do not guess or hallucinate.
+        ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `${item.title}: ${item.content}`).join('\n\n') : 'No specific knowledge provided.'}
       `;
 
-      const sessionPromise = ai.live.connect({
-        model: GEMINI_LIVE_MODEL,
-        config: {
-          responseModalities: [Modality.AUDIO],
-          systemInstruction,
-          temperature: 0.7,
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: normalizeGeminiLiveVoice(
-                  BEAUTIFUL_VOICES.find((v) => v.id === voiceName)?.engine ||
-                    voiceProfile?.recommendedVoice ||
-                    selectedPersona?.voiceName ||
-                    'Kore'
-                ),
-              },
+    const sessionPromise = ai.live.connect({
+      model: GEMINI_LIVE_MODEL,
+      config: {
+        responseModalities: [Modality.AUDIO],
+        systemInstruction,
+        temperature: 0.65,
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: normalizeGeminiLiveVoice(
+                BEAUTIFUL_VOICES.find((v) => v.id === voiceName)?.engine ||
+                  voiceProfile?.recommendedVoice ||
+                  selectedPersona?.voiceName ||
+                  'Kore'
+              ),
             },
           },
-          // @ts-ignore - Based on the provided architecture document
-          enable_affective_dialog: true,
-          tools: [
-            {
-              functionDeclarations: [
-                captureLeadDeclaration,
-                scheduleAppointmentDeclaration,
-                transferToHumanDeclaration
-              ]
-            }
-          ]
         },
-        callbacks: {
-          onopen: async () => {
-            console.log('VoiceAgent: Connection opened!');
+        // Preview-only flags often trigger opaque WS 1011 on Gemini Live + ephemeral auth; omit until stable.
+        ...(resumeHandle ? { sessionResumption: { handle: resumeHandle } } : {}),
+        tools: [
+          {
+            functionDeclarations: [
+              captureLeadDeclaration,
+              scheduleAppointmentDeclaration,
+              transferToHumanDeclaration,
+            ],
+          },
+        ],
+      },
+      callbacks: {
+        onopen: async () => {
+          if (userEndedCallRef.current) return;
+          liveRealtimeSendAllowedRef.current = false;
+          try {
+            const p = liveSessionPromiseRef.current;
+            if (!p) return;
+            const s = await p;
+            if (userEndedCallRef.current) return;
+            sessionRef.current = s;
             setIsConnected(true);
-            setStatus('Establishing audio stream...');
-            await startAudioCapture(sessionPromise);
+
+            // Send greeting trigger FIRST — model starts generating while mic sets up in parallel
+            try {
+              s.sendClientContent({
+                turns: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+                turnComplete: true,
+              });
+            } catch {}
+
+            // Set up mic in the background — model is already working on its response
+            setStatus('Connecting...');
+            await startAudioCapture();
+            if (userEndedCallRef.current) return;
+
+            // Mic ready — open the audio send channel
+            liveRealtimeSendAllowedRef.current = true;
             setIsConnecting(false);
             setStatus('Agent is listening...');
-          },
-          onmessage: async (message) => {
-            console.log('VoiceAgent: Received message', message);
-            if (message.serverContent?.modelTurn?.parts) {
+          } catch (e) {
+            console.warn('VoiceAgent: onopen setup failed', e);
+            liveRealtimeSendAllowedRef.current = false;
+          }
+        },
+        onmessage: async (message) => {
+          console.log('VoiceAgent: Received message', message);
+          const resUpdate = message.sessionResumptionUpdate;
+          if (resUpdate?.resumable && resUpdate.newHandle) {
+            resumptionHandleRef.current = resUpdate.newHandle;
+          }
+          if (message.goAway?.timeLeft) {
+            setStatus('Connection renewing…');
+          }
+          if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.inlineData?.data) {
                   const pcmData = base64ToPcm(part.inlineData.data);
@@ -450,41 +512,120 @@ export default function VoiceAgent({
                   result = { status: "Transfer initiated" };
                 }
                 
-                sessionPromise.then((s) => {
-                  s.sendToolResponse({
-                    functionResponses: [{ name: call.name, response: result, id: call.id }]
-                  });
-                });
+                const sTool = sessionRef.current;
+                if (sTool && liveRealtimeSendAllowedRef.current && isGeminiLiveWebSocketOpen(sTool)) {
+                  try {
+                    sTool.sendToolResponse({
+                      functionResponses: [{ name: call.name, response: result, id: call.id }],
+                    });
+                  } catch {
+                    liveRealtimeSendAllowedRef.current = false;
+                  }
+                }
               }
             }
 
             if (message.serverContent?.interrupted) {
-              if (playbackCtxRef.current) {
-                playbackCtxRef.current.close();
-                playbackCtxRef.current = null;
-              }
+              // Stop all buffered audio immediately so the agent goes silent at once
+              activeSourcesRef.current.forEach(source => {
+                try { source.stop(0); } catch {}
+              });
               activeSourcesRef.current.clear();
-              nextPlaybackTimeRef.current = 0;
+              if (playbackCtxRef.current) {
+                nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime;
+              }
             }
           },
-          onclose: () => {
-            console.log('VoiceAgent: Connection closed');
-            stopSession();
+          onclose: (ev?: CloseEvent) => {
+            const detail =
+              ev != null && typeof ev.code === 'number'
+                ? ` code=${ev.code} reason=${ev.reason || '(none)'} wasClean=${ev.wasClean}`
+                : '';
+            console.warn(`VoiceAgent: Connection closed.${detail}`);
+            liveRealtimeSendAllowedRef.current = false;
+            liveSessionPromiseRef.current = null;
+            sessionRef.current = null;
+            if (userEndedCallRef.current) {
+              return;
+            }
+            void attemptReconnect();
           },
           onerror: (err) => {
             console.error('Live API Error:', err);
             const errMsg = err.message?.toLowerCase() || '';
             if (errMsg.includes('quota') || errMsg.includes('rate limit') || errMsg.includes('429')) {
+              userEndedCallRef.current = true;
               setStatus('Quota exceeded. Please wait a moment and try again.');
-            } else {
-              setStatus('Connection lost');
+              stopSession();
+              return;
             }
-            stopSession();
-          }
-        }
+            setStatus('Connection issue…');
+          },
+        },
       });
 
-      sessionRef.current = await sessionPromise;
+    liveSessionPromiseRef.current = sessionPromise;
+    try {
+      await sessionPromise;
+      if (userEndedCallRef.current) {
+        liveRealtimeSendAllowedRef.current = false;
+        sessionRef.current?.close();
+        sessionRef.current = null;
+        liveSessionPromiseRef.current = null;
+      }
+    } catch (e) {
+      liveRealtimeSendAllowedRef.current = false;
+      liveSessionPromiseRef.current = null;
+      sessionRef.current = null;
+      throw e;
+    }
+  }
+
+  async function attemptReconnect() {
+    if (userEndedCallRef.current || isReconnectingRef.current) return;
+    const handle = resumptionHandleRef.current;
+    if (!handle) {
+      userEndedCallRef.current = true;
+      stopSession();
+      setStatus('Connection lost');
+      return;
+    }
+
+    isReconnectingRef.current = true;
+    setStatus('Reconnecting…');
+    setIsConnecting(true);
+
+    while (reconnectAttemptsRef.current < MAX_LIVE_RECONNECT_ATTEMPTS && !userEndedCallRef.current) {
+      reconnectAttemptsRef.current += 1;
+      await new Promise((r) => setTimeout(r, Math.min(800 * reconnectAttemptsRef.current, 4000)));
+      try {
+        await connectLive({
+          resumeHandle: resumptionHandleRef.current ?? handle,
+          fromReconnect: true,
+        });
+        reconnectAttemptsRef.current = 0;
+        setStatus('Agent is listening...');
+        isReconnectingRef.current = false;
+        setIsConnecting(false);
+        return;
+      } catch (e) {
+        console.error('Reconnect failed:', e);
+      }
+    }
+
+    isReconnectingRef.current = false;
+    setIsConnecting(false);
+    userEndedCallRef.current = true;
+    stopSession();
+    setStatus('Connection lost — please start again.');
+  }
+
+  const startSession = async () => {
+    userEndedCallRef.current = false;
+    resumptionHandleRef.current = null;
+    reconnectAttemptsRef.current = 0;
+    try {
+      await connectLive({});
     } catch (error) {
       console.error('Failed to start session:', error);
       setIsConnecting(false);
@@ -493,6 +634,12 @@ export default function VoiceAgent({
   };
 
   const stopSession = () => {
+    userEndedCallRef.current = true;
+    liveRealtimeSendAllowedRef.current = false;
+    resumptionHandleRef.current = null;
+    reconnectAttemptsRef.current = 0;
+    liveSessionPromiseRef.current = null;
+
     if (sessionRef.current) {
       sessionRef.current.close();
       sessionRef.current = null;
@@ -520,62 +667,60 @@ export default function VoiceAgent({
     }
   };
 
-  const startAudioCapture = async (sessionPromise?: Promise<any>) => {
+  const startAudioCapture = async () => {
     console.log('VoiceAgent: startAudioCapture called');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      if (isCapturingRef.current && audioContextRef.current && workletNodeRef.current) {
+        console.log('VoiceAgent: Audio capture already active');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: noiseSuppression,
+          noiseSuppression,
           echoCancellation: true,
-        } 
+        },
       });
       console.log('VoiceAgent: Microphone access granted');
-      audioContextRef.current = new AudioContext({ sampleRate: 16000 });
-      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
-      
-      micGainNodeRef.current = audioContextRef.current.createGain();
-      micGainNodeRef.current.gain.value = micGain * 1.2; // pre-amplification boost
-      
-      processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
 
-      processorRef.current.onaudioprocess = (e) => {
-        if (isMuted || !isCapturingRef.current) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Inline PCM conversion for speed
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
-        }
-        
-        // Inline Base64 conversion for speed
-        let binary = '';
-        const bytes = new Uint8Array(pcmData.buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64Data = btoa(binary);
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
 
+      await audioContext.audioWorklet.addModule(new URL('../audio/gemini-capture.worklet.ts', import.meta.url));
+
+      const workletNode = new AudioWorkletNode(audioContext, 'gemini-capture', {
+        numberOfInputs: 1,
+        numberOfOutputs: 0,
+        channelCount: 1,
+      });
+      workletNodeRef.current = workletNode;
+
+      workletNode.port.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
+        if (isMuted || !isCapturingRef.current || !liveRealtimeSendAllowedRef.current) return;
+        const s = sessionRef.current;
+        if (!s || !isGeminiLiveWebSocketOpen(s)) {
+          if (s) liveRealtimeSendAllowedRef.current = false;
+          return;
+        }
+        const pcmData = new Int16Array(ev.data);
+        const base64Data = pcmToBase64(pcmData);
         try {
-          if (sessionPromise && isConnectedRef.current && isCapturingRef.current) {
-             sessionPromise.then(s => {
-                 s.sendRealtimeInput({
-                   audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-                 });
-             }).catch(err => console.log('Failed to send audio wrapper', err));
-          } else if (sessionRef.current && isConnectedRef.current && isCapturingRef.current) {
-             sessionRef.current.sendRealtimeInput({
-               audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-             });
-          }
-        } catch (error) {
-          console.warn('Failed to send audio data:', error);
+          s.sendRealtimeInput({
+            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' },
+          });
+        } catch {
+          liveRealtimeSendAllowedRef.current = false;
         }
       };
 
+      sourceRef.current = audioContext.createMediaStreamSource(stream);
+
+      micGainNodeRef.current = audioContext.createGain();
+      micGainNodeRef.current.gain.value = micGain * 1.2;
+
       sourceRef.current.connect(micGainNodeRef.current);
-      micGainNodeRef.current.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
+      micGainNodeRef.current.connect(workletNode);
+
       isCapturingRef.current = true;
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -584,131 +729,114 @@ export default function VoiceAgent({
 
   const stopAudioCapture = () => {
     isCapturingRef.current = false;
-    if (processorRef.current) {
-      processorRef.current.onaudioprocess = null;
-      processorRef.current.disconnect();
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
     }
-    if (sourceRef.current) sourceRef.current.disconnect();
-    if (audioContextRef.current) audioContextRef.current.close();
-    audioContextRef.current = null;
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    micGainNodeRef.current = null;
   };
 
   const scheduleAudioChunk = (pcmData: Int16Array) => {
-    console.log('Scheduling audio chunk, length:', pcmData.length);
     if (!playbackCtxRef.current || playbackCtxRef.current.state === 'closed') {
       playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      
-      // Setup Audio Processing Chain for maximum clarity and human warmth
-      // 1. High-pass filter to remove low-end rumble but keep "chest" warmth
-      const hpf = playbackCtxRef.current.createBiquadFilter();
+      const setupCtx = playbackCtxRef.current;
+      const t = setupCtx.currentTime;
+
+      // 1. HPF — remove sub-bass rumble
+      const hpf = setupCtx.createBiquadFilter();
       hpf.type = 'highpass';
-      hpf.frequency.setValueAtTime(70, playbackCtxRef.current.currentTime); // Slightly lower for more natural bass
-      
-      // 2. Peaking filter to add "body" and warmth to the voice (Low-mids)
-      const bodyFilter = playbackCtxRef.current.createBiquadFilter();
-      bodyFilter.type = 'peaking';
-      bodyFilter.frequency.setValueAtTime(250, playbackCtxRef.current.currentTime);
-      bodyFilter.Q.setValueAtTime(0.8, playbackCtxRef.current.currentTime);
-      bodyFilter.gain.setValueAtTime(3, playbackCtxRef.current.currentTime); // 3dB boost for warmth
-      
-      // 3. High-shelf filter for clarity without digital "hiss"
-      const hsf = playbackCtxRef.current.createBiquadFilter();
-      hsf.type = 'highshelf';
-      hsf.frequency.setValueAtTime(4500, playbackCtxRef.current.currentTime);
-      hsf.gain.setValueAtTime(4, playbackCtxRef.current.currentTime); // 4dB boost for enhanced crispness
-      
-      // 4. Dynamics Compressor for consistent, professional volume (Natural Style)
-      compressorRef.current = playbackCtxRef.current.createDynamicsCompressor();
-      compressorRef.current.threshold.setValueAtTime(-16, playbackCtxRef.current.currentTime);
-      compressorRef.current.knee.setValueAtTime(25, playbackCtxRef.current.currentTime); // Softer knee
-      compressorRef.current.ratio.setValueAtTime(2, playbackCtxRef.current.currentTime); // Less aggressive
-      compressorRef.current.attack.setValueAtTime(0.015, playbackCtxRef.current.currentTime); // Let transients pass
-      compressorRef.current.release.setValueAtTime(0.25, playbackCtxRef.current.currentTime);
-      
-      // 5. Volume control
-      playbackGainNodeRef.current = playbackCtxRef.current.createGain();
-      playbackGainNodeRef.current.gain.setValueAtTime(volume, playbackCtxRef.current.currentTime);
-      
-      // Connect the chain
-      hpf.connect(bodyFilter);
-      bodyFilter.connect(hsf);
-      hsf.connect(compressorRef.current);
+      hpf.frequency.setValueAtTime(85, t);
+
+      // 2. Body warmth — chest resonance
+      const warmth = setupCtx.createBiquadFilter();
+      warmth.type = 'peaking';
+      warmth.frequency.setValueAtTime(320, t);
+      warmth.Q.setValueAtTime(0.9, t);
+      warmth.gain.setValueAtTime(2.0, t);
+
+      // 3. Sweetness / presence — Indian singer melodic quality (2–3 kHz)
+      const sweetness = setupCtx.createBiquadFilter();
+      sweetness.type = 'peaking';
+      sweetness.frequency.setValueAtTime(2200, t);
+      sweetness.Q.setValueAtTime(1.2, t);
+      sweetness.gain.setValueAtTime(2.5, t);
+
+      // 4. Harshness cut — soften the digital edge at 5 kHz
+      const deharsh = setupCtx.createBiquadFilter();
+      deharsh.type = 'peaking';
+      deharsh.frequency.setValueAtTime(5000, t);
+      deharsh.Q.setValueAtTime(0.8, t);
+      deharsh.gain.setValueAtTime(-2.0, t);
+
+      // 5. Air / sparkle — top-end shimmer
+      const air = setupCtx.createBiquadFilter();
+      air.type = 'highshelf';
+      air.frequency.setValueAtTime(9000, t);
+      air.gain.setValueAtTime(2.0, t);
+
+      // 6. Gentle transparent compressor
+      compressorRef.current = setupCtx.createDynamicsCompressor();
+      compressorRef.current.threshold.setValueAtTime(-18, t);
+      compressorRef.current.knee.setValueAtTime(20, t);
+      compressorRef.current.ratio.setValueAtTime(2.0, t);
+      compressorRef.current.attack.setValueAtTime(0.025, t);
+      compressorRef.current.release.setValueAtTime(0.3, t);
+
+      // 7. Master volume — single gain stage (no per-chunk gain duplication)
+      playbackGainNodeRef.current = setupCtx.createGain();
+      playbackGainNodeRef.current.gain.setValueAtTime(volume, t);
+
+      // Chain: hpf → warmth → sweetness → deharsh → air → compressor → master → out
+      // No delay/reverb — keeps speech consonants crisp and intelligible
+      hpf.connect(warmth);
+      warmth.connect(sweetness);
+      sweetness.connect(deharsh);
+      deharsh.connect(air);
+      air.connect(compressorRef.current);
       compressorRef.current.connect(playbackGainNodeRef.current);
-      playbackGainNodeRef.current.connect(playbackCtxRef.current.destination);
-      
-      // Store filter refs if needed for cleanup
+      playbackGainNodeRef.current.connect(setupCtx.destination);
+
       (playbackCtxRef.current as any)._entryNode = hpf;
-      
-      nextPlaybackTimeRef.current = playbackCtxRef.current.currentTime + 0.03;
+      nextPlaybackTimeRef.current = setupCtx.currentTime + 0.02;
     }
-    
+
     const ctx = playbackCtxRef.current;
     const buffer = ctx.createBuffer(1, pcmData.length, 24000);
     const channelData = buffer.getChannelData(0);
-    
     for (let i = 0; i < pcmData.length; i++) {
-      channelData[i] = pcmData[i] / 32768;
+      channelData[i] = pcmData[i]! / 32768;
     }
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = playbackSpeed;
-    
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = volume;
-    
-    // Ensure we don't schedule in the past and add a tiny jitter buffer
+
     let startTime = nextPlaybackTimeRef.current;
     if (startTime < ctx.currentTime) {
-      startTime = ctx.currentTime + 0.06; // 60ms jitter buffer to prevent audio breaking while minimizing latency
+      startTime = ctx.currentTime + 0.03;
     }
-    
-    // Tiny fade-in to prevent clicks
-    gainNode.gain.setValueAtTime(0, startTime);
-    gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.005);
-    
-    source.connect(gainNode);
-    const entryNode = (ctx as any)._entryNode;
-    if (entryNode) {
-      gainNode.connect(entryNode);
-    } else {
-      gainNode.connect(ctx.destination);
-    }
-    
+
+    // Connect source directly to EQ chain — no intermediate gain node
+    const entryNode = (ctx as any)._entryNode as AudioNode;
+    source.connect(entryNode ?? ctx.destination);
     source.start(startTime);
     activeSourcesRef.current.add(source);
-    
-    // Calculate duration considering playback speed
-    const duration = (pcmData.length / 24000) / playbackSpeed;
-    
-    // Tiny fade-out to prevent clicks
-    gainNode.gain.setValueAtTime(volume, startTime + duration - 0.005);
-    gainNode.gain.linearRampToValueAtTime(0, startTime + duration);
-    
+
+    const duration = pcmData.length / 24000 / playbackSpeed;
     nextPlaybackTimeRef.current = startTime + duration;
 
     source.onended = () => {
       activeSourcesRef.current.delete(source);
     };
-  };
-
-  // PCM Helpers
-  const floatToPcm = (float32Array: Float32Array): Int16Array => {
-    const pcm = new Int16Array(float32Array.length);
-    for (let i = 0; i < float32Array.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32Array[i]));
-      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    return pcm;
-  };
-
-  const pcmToBase64 = (pcmData: Int16Array): string => {
-    const bytes = new Uint8Array(pcmData.buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
   };
 
   const base64ToPcm = (base64: string): Int16Array => {
@@ -850,27 +978,6 @@ export default function VoiceAgent({
       </div>
 
       <div className="w-full space-y-4 relative z-10 mt-8">
-        {!isConnected && (
-          <div className="space-y-4 mb-8">
-            <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest">Select Voice Style</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {BEAUTIFUL_VOICES.map((v) => (
-                <button
-                  key={v.id}
-                  onClick={() => setVoiceName(v.id)}
-                  className={cn(
-                    "px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border flex flex-col items-center",
-                    voiceName === v.id 
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200 scale-105" 
-                      : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50"
-                  )}
-                >
-                  <span>{v.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         {!isConnected ? (
           <button
             onClick={startSession}

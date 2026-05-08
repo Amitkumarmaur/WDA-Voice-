@@ -46,11 +46,9 @@ const prebuiltLower = new Map<string, GeminiLivePrebuiltVoice>(
   GEMINI_LIVE_PREBUILT_VOICE_NAMES.map((n) => [n.toLowerCase(), n])
 );
 
-/** Subset shown in VoiceAgent + aligned with voice-clone analysis enum. */
+/** Single voice — warm, melodic, sweet female (Aoede). */
 export const GEMINI_LIVE_UI_VOICES = [
-  { id: 'voice_kore', label: 'Support Voice 1: Firm & clear (Kore)', engine: 'Kore' as const },
-  { id: 'voice_aoede', label: 'Support Voice 2: Breezy (Aoede)', engine: 'Aoede' as const },
-  { id: 'voice_zephyr', label: 'Support Voice 3: Bright (Zephyr)', engine: 'Zephyr' as const },
+  { id: 'voice_aoede', label: 'Aoede', engine: 'Aoede' as const },
 ];
 
 export function normalizeGeminiLiveVoice(raw: string | undefined | null): GeminiLivePrebuiltVoice {

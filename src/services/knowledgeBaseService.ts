@@ -2,10 +2,10 @@ import { getSupabase, getSupabaseUrl } from '../lib/supabase';
 import { KnowledgeItem } from '../types';
 import * as pdfjs from 'pdfjs-dist';
 
-// @ts-ignore - Vite handles this import
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url
+).href;
 
 async function invokeGeminiGenerate(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
@@ -41,6 +41,19 @@ function mapRow(row: Record<string, unknown>): KnowledgeItem {
     type: row.type as KnowledgeItem['type'],
     createdAt: row.created_at,
   };
+}
+
+/** Remove characters PostgreSQL cannot store in a text column (null bytes, stray control chars). */
+function sanitizeForPostgres(text: string): string {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    // Allow tab (9), newline (10), carriage return (13), and everything >= space (32)
+    if (code === 9 || code === 10 || code === 13 || code >= 32) {
+      result += text[i];
+    }
+  }
+  return result;
 }
 
 export const KnowledgeBaseService = {
@@ -85,7 +98,11 @@ export const KnowledgeBaseService = {
 
   async extractTextFromPdf(file: File): Promise<string> {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    const pdf = await pdfjs.getDocument({
+      data: arrayBuffer,
+      cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+      cMapPacked: true,
+    }).promise;
     let fullText = '';
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -95,7 +112,7 @@ export const KnowledgeBaseService = {
         .join(' ');
       fullText += pageText + '\n';
     }
-    return fullText;
+    return sanitizeForPostgres(fullText);
   },
 
   async transcribeAudio(file: File): Promise<string> {

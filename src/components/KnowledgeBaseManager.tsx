@@ -44,25 +44,38 @@ export default function KnowledgeBaseManager({ organizationId, onUpdate }: Knowl
       let type: 'pdf' | 'audio' = 'pdf';
 
       if (file.type === 'application/pdf') {
+        console.log('Extracting text from PDF...');
         content = await KnowledgeBaseService.extractTextFromPdf(file);
+        console.log('PDF extracted, chars:', content.length);
         type = 'pdf';
       } else if (file.type.startsWith('audio/')) {
+        console.log('Transcribing audio...');
         content = await KnowledgeBaseService.transcribeAudio(file);
         type = 'audio';
       } else {
-        throw new Error('Unsupported file type');
+        throw new Error(`Unsupported file type: ${file.type}`);
       }
 
+      console.log('Saving to knowledge base...');
       await KnowledgeBaseService.addKnowledgeItem(organizationId, {
         title: file.name,
         content,
         source: file.name,
         type,
       });
+      console.log('Saved successfully.');
       await loadItems();
     } catch (error) {
-      console.error('Failed to process file:', error);
-      alert('Failed to process file. Please ensure it is a valid PDF or Audio file.');
+      console.error('Failed to process file (full error):', error);
+      let msg: string;
+      if (error instanceof Error) {
+        msg = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        msg = JSON.stringify(error);
+      } else {
+        msg = String(error);
+      }
+      alert(`Failed to process file: ${msg}`);
     } finally {
       setIsUploading(false);
     }
