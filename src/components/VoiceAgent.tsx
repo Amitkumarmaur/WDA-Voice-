@@ -158,9 +158,15 @@ export default function VoiceAgent({
   }, [noiseSuppression]);
 
   const [status, setStatus] = useState<string>('Ready to start');
-  const [voiceName, setVoiceName] = useState('voice_leda');
+  const [voiceName, setVoiceName] = useState(() => {
+    // Persona default if set, otherwise Leda
+    return 'voice_leda';
+  });
+  const voiceManuallySetRef = useRef(false);
 
   useEffect(() => {
+    // Only apply persona voice if the user hasn't manually picked one
+    if (voiceManuallySetRef.current) return;
     if (!selectedPersona?.voiceName) return;
     const engine = normalizeGeminiLiveVoice(selectedPersona.voiceName);
     const entry = BEAUTIFUL_VOICES.find((v) => v.engine === engine);
@@ -971,27 +977,6 @@ export default function VoiceAgent({
                       <span className="text-[10px] font-bold text-slate-400 w-6 text-right shrink-0">{micGain.toFixed(1)}x</span>
                     </div>
 
-                    <div className="flex flex-col space-y-1.5 w-full pt-1 border-t border-slate-100">
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Voice</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {BEAUTIFUL_VOICES.map((v) => (
-                          <button
-                            key={v.id}
-                            onClick={() => setVoiceName(v.id)}
-                            className={cn(
-                              "px-2.5 py-1 rounded-full text-[10px] font-bold transition-all border",
-                              voiceName === v.id
-                                ? "bg-violet-600 text-white border-violet-700 shadow-sm"
-                                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                            )}
-                          >
-                            {v.label}
-                          </button>
-                        ))}
-                      </div>
-                      {isConnected && <p className="text-[9px] text-slate-400">Takes effect on next call</p>}
-                    </div>
-                    
                     <div className="flex items-center justify-between w-full space-x-2 pt-1 border-t border-slate-100">
                       <div className="flex bg-slate-100/50 rounded-full p-1">
                         {[0.75, 1, 1.25, 1.5].map((speed) => (
@@ -1037,7 +1022,37 @@ export default function VoiceAgent({
         )}
       </div>
 
-      <div className="w-full space-y-4 relative z-10 mt-8">
+      <div className="w-full relative z-10">
+        <div className="flex flex-col space-y-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Voice</span>
+          <div className="flex flex-wrap gap-2">
+            {BEAUTIFUL_VOICES.map((v) => (
+              <button
+                key={v.id}
+                disabled={isConnected}
+                onClick={() => {
+                  voiceManuallySetRef.current = true;
+                  setVoiceName(v.id);
+                }}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-semibold transition-all border",
+                  voiceName === v.id
+                    ? "bg-violet-600 text-white border-violet-700 shadow-sm"
+                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50",
+                  isConnected && "opacity-40 cursor-not-allowed"
+                )}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+          {isConnected && (
+            <p className="text-[10px] text-slate-400">End the call to change voice</p>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full space-y-4 relative z-10">
         {!isConnected ? (
           <button
             onClick={startSession}
