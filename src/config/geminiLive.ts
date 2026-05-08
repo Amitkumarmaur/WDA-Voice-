@@ -46,9 +46,17 @@ const prebuiltLower = new Map<string, GeminiLivePrebuiltVoice>(
   GEMINI_LIVE_PREBUILT_VOICE_NAMES.map((n) => [n.toLowerCase(), n])
 );
 
-/** Single voice — warm, melodic, sweet female (Aoede). */
+/** Sweet/warm female voices available in the voice picker. */
 export const GEMINI_LIVE_UI_VOICES = [
-  { id: 'voice_aoede', label: 'Aoede', engine: 'Aoede' as const },
+  { id: 'voice_leda',          label: 'Leda',          engine: 'Leda'          as const },
+  { id: 'voice_sulafat',       label: 'Sulafat',       engine: 'Sulafat'       as const },
+  { id: 'voice_achernar',      label: 'Achernar',      engine: 'Achernar'      as const },
+  { id: 'voice_aoede',         label: 'Aoede',         engine: 'Aoede'         as const },
+  { id: 'voice_callirrhoe',    label: 'Callirrhoe',    engine: 'Callirrhoe'    as const },
+  { id: 'voice_enceladus',     label: 'Enceladus',     engine: 'Enceladus'     as const },
+  { id: 'voice_zephyr',        label: 'Zephyr',        engine: 'Zephyr'        as const },
+  { id: 'voice_pulcherrima',   label: 'Pulcherrima',   engine: 'Pulcherrima'   as const },
+  { id: 'voice_vindemiatrix',  label: 'Vindemiatrix',  engine: 'Vindemiatrix'  as const },
 ];
 
 export function normalizeGeminiLiveVoice(raw: string | undefined | null): GeminiLivePrebuiltVoice {

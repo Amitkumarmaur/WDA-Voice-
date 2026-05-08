@@ -158,7 +158,7 @@ export default function VoiceAgent({
   }, [noiseSuppression]);
 
   const [status, setStatus] = useState<string>('Ready to start');
-  const [voiceName, setVoiceName] = useState('voice_aoede');
+  const [voiceName, setVoiceName] = useState('voice_leda');
 
   useEffect(() => {
     if (!selectedPersona?.voiceName) return;
@@ -969,6 +969,27 @@ export default function VoiceAgent({
                         className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
                       />
                       <span className="text-[10px] font-bold text-slate-400 w-6 text-right shrink-0">{micGain.toFixed(1)}x</span>
+                    </div>
+
+                    <div className="flex flex-col space-y-1.5 w-full pt-1 border-t border-slate-100">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Voice</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {BEAUTIFUL_VOICES.map((v) => (
+                          <button
+                            key={v.id}
+                            onClick={() => setVoiceName(v.id)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-full text-[10px] font-bold transition-all border",
+                              voiceName === v.id
+                                ? "bg-violet-600 text-white border-violet-700 shadow-sm"
+                                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                            )}
+                          >
+                            {v.label}
+                          </button>
+                        ))}
+                      </div>
+                      {isConnected && <p className="text-[9px] text-slate-400">Takes effect on next call</p>}
                     </div>
                     
                     <div className="flex items-center justify-between w-full space-x-2 pt-1 border-t border-slate-100">
