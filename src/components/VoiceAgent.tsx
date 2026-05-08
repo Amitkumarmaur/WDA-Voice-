@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
+import { GoogleGenAI, Modality, Type, FunctionDeclaration, StartSensitivity, EndSensitivity } from "@google/genai";
 import { Mic, MicOff, PhoneOff, Loader2, User, Bot, Volume2, VolumeX, AudioLines, Settings2, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { BusinessService } from '../services/businessService';
@@ -420,6 +420,12 @@ export default function VoiceAgent({
                   'Kore'
               ),
             },
+          },
+        },
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
           },
         },
         // Preview-only flags often trigger opaque WS 1011 on Gemini Live + ephemeral auth; omit until stable.
