@@ -57,12 +57,15 @@ Deno.serve(async (req) => {
     }
 
     const client = new GoogleGenAI({ apiKey: geminiKey });
-    const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+    // Short-lived browser tokens: limit blast radius if a token leaks (never ship API keys to the client).
+    const expireTime = new Date(Date.now() + 12 * 60 * 1000).toISOString();
+    const newSessionExpireTime = new Date(Date.now() + 90 * 1000).toISOString();
 
+    // uses: 1 breaks dev flows (Fast Refresh / remounts open Live twice) and can surface as WS 1011.
+    // Still bounded by expireTime; tighten with env if you need strict single-use in production.
     const token = await client.authTokens.create({
       config: {
-        uses: 1,
+        uses: 0,
         expireTime,
         newSessionExpireTime,
         httpOptions: { apiVersion: "v1alpha" },

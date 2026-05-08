@@ -40,7 +40,9 @@ export interface Lead {
   id?: string;
   name: string;
   email: string;
+  phone?: string;
   interest?: string;
+  status?: 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
   conversationId?: string;
   createdAt: any;
 }
@@ -49,7 +51,9 @@ export interface Appointment {
   id?: string;
   name: string;
   email: string;
+  phone?: string;
   date: any;
   notes?: string;
+  status?: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   createdAt: any;
 }

@@ -3,7 +3,7 @@ import { getSupabase } from '../../lib/supabase';
 import { Message } from '../../types';
 import { MessageSquare, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 
-type Row = { id: string; created_at: string; messages: Message[] };
+type Row = { id: string; created_at: string; messages: Message[]; duration_seconds?: number | null };
 
 export default function TranscriptsPanel({ organizationId }: { organizationId: string }) {
   const [rows, setRows] = useState<Row[]>([]);
@@ -15,7 +15,7 @@ export default function TranscriptsPanel({ organizationId }: { organizationId: s
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from('transcripts')
-      .select('id, messages, created_at')
+      .select('id, messages, duration_seconds, created_at')
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .limit(30);
@@ -25,6 +25,7 @@ export default function TranscriptsPanel({ organizationId }: { organizationId: s
           id: r.id as string,
           created_at: r.created_at as string,
           messages: (r.messages as Message[]) ?? [],
+          duration_seconds: r.duration_seconds as number | null,
         }))
       );
     }
@@ -59,7 +60,14 @@ export default function TranscriptsPanel({ organizationId }: { organizationId: s
                 className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 text-left text-sm font-medium text-slate-800 hover:bg-slate-100"
                 onClick={() => setOpenId(openId === t.id ? null : t.id)}
               >
-                <span>{new Date(t.created_at).toLocaleString()}</span>
+                <span className="flex items-center gap-3">
+                  <span>{new Date(t.created_at).toLocaleString()}</span>
+                  {t.duration_seconds != null && (
+                    <span className="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                      {Math.floor(t.duration_seconds / 60)}m {t.duration_seconds % 60}s
+                    </span>
+                  )}
+                </span>
                 {openId === t.id ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
               </button>
               {openId === t.id && (

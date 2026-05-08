@@ -26,6 +26,7 @@ export const BusinessService = {
         organization_id: tenant.organizationId,
         name: lead.name,
         email: lead.email,
+        phone: lead.phone ?? null,
         interest: lead.interest ?? null,
         conversation_id: lead.conversationId ?? null,
       })
@@ -67,6 +68,7 @@ export const BusinessService = {
         organization_id: tenant.organizationId,
         name: appointment.name,
         email: appointment.email,
+        phone: appointment.phone ?? null,
         date,
         notes: appointment.notes ?? null,
       })
@@ -76,7 +78,11 @@ export const BusinessService = {
     return data.id as string;
   },
 
-  async saveTranscript(tenant: TenantRef | null, messages: Message[]): Promise<string | undefined> {
+  async saveTranscript(
+    tenant: TenantRef | null,
+    messages: Message[],
+    durationSeconds?: number
+  ): Promise<string | undefined> {
     if (!tenant || messages.length === 0) return undefined;
     const supabase = getSupabase();
     const payload = messages.map((m) => ({
@@ -97,10 +103,26 @@ export const BusinessService = {
       .insert({
         organization_id: tenant.organizationId,
         messages: payload,
+        duration_seconds: durationSeconds ?? null,
       })
       .select('id')
       .single();
     if (error) throw error;
     return data.id as string;
+  },
+
+  async logVoiceUsage(
+    organizationId: string,
+    transcriptId: string | undefined,
+    durationSeconds: number
+  ): Promise<void> {
+    if (durationSeconds <= 0) return;
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('log_voice_usage', {
+      p_organization_id: organizationId,
+      p_transcript_id: transcriptId ?? null,
+      p_duration_seconds: Math.round(durationSeconds),
+    });
+    if (error) console.warn('logVoiceUsage failed:', error.message);
   },
 };

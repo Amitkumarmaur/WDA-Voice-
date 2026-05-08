@@ -15,6 +15,6 @@ View your app in AI Studio: https://ai.studio/apps/41d81f93-f92f-4d05-adb0-0a8e7
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Configure Supabase Edge Function secret `GEMINI_API_KEY` (Dashboard → Project Settings → Edge Functions → Secrets). **Do not** put `GEMINI_API_KEY` in any `VITE_*` variable — the browser only receives short-lived tokens from `gemini-live-token`.
 3. Run the app:
    `npm run dev`

@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Invalid JSON" }, { status: 400, headers: cors });
     }
 
-    // Honeypot: bots often fill hidden "website" / "company_url" fields.
+    // Honeypot: silently accept bots to avoid giving hints
     const trap = typeof body.website === "string" ? body.website.trim() : "";
     if (trap.length > 0) {
       return Response.json({ ok: true }, { status: 200, headers: cors });
@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
 
     const name = trimStr(body.name, 200);
     const email = trimStr(body.email, 320).toLowerCase();
-    const message = trimStr(body.message, 10000);
+    const company = trimStr(body.company, 200);
+    const message = trimStr(body.message, 5000);
 
     if (name.length < 1 || message.length < 1 || email.length < 3) {
       return Response.json({ error: "Name, email, and message are required" }, { status: 400, headers: cors });
@@ -55,14 +56,16 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { error: insErr } = await admin.from("contact_submissions").insert({
+    const { error: insErr } = await admin.from("contact_inquiries").insert({
       name,
       email,
+      company: company || null,
       message,
+      source: "contact_form",
     });
 
     if (insErr) {
-      console.error("contact_submissions insert", insErr);
+      console.error("contact_inquiries insert", insErr);
       return Response.json({ error: "Could not save message" }, { status: 500, headers: cors });
     }
 

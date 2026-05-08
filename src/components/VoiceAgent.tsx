@@ -173,6 +173,7 @@ export default function VoiceAgent({
   const micGainNodeRef = useRef<GainNode | null>(null);
   const sessionRef = useRef<any>(null);
   const userEndedCallRef = useRef(false);
+  const callStartTimeRef = useRef<number | null>(null);
   const resumptionHandleRef = useRef<string | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isReconnectingRef = useRef(false);
@@ -622,6 +623,7 @@ export default function VoiceAgent({
 
   const startSession = async () => {
     userEndedCallRef.current = false;
+    callStartTimeRef.current = Date.now();
     resumptionHandleRef.current = null;
     reconnectAttemptsRef.current = 0;
     try {
@@ -633,18 +635,23 @@ export default function VoiceAgent({
     }
   };
 
-  const stopSession = () => {
+  const stopSession = async () => {
     userEndedCallRef.current = true;
     liveRealtimeSendAllowedRef.current = false;
     resumptionHandleRef.current = null;
     reconnectAttemptsRef.current = 0;
     liveSessionPromiseRef.current = null;
 
+    const durationSeconds = callStartTimeRef.current
+      ? Math.round((Date.now() - callStartTimeRef.current) / 1000)
+      : 0;
+    callStartTimeRef.current = null;
+
     if (sessionRef.current) {
       sessionRef.current.close();
       sessionRef.current = null;
     }
-    
+
     // Stop all active audio sources
     activeSourcesRef.current.forEach(source => {
       try { source.stop(); } catch (e) {}
@@ -660,10 +667,14 @@ export default function VoiceAgent({
     setIsConnected(false);
     setIsConnecting(false);
     setStatus('Call ended');
-    
+
     const snap = transcriptSnapshotRef.current;
-    if (snap.length > 0) {
-      void BusinessService.saveTranscript(tenantRef.current, snap);
+    const t = tenantRef.current;
+    if (snap.length > 0 && t) {
+      const transcriptId = await BusinessService.saveTranscript(t, snap, durationSeconds);
+      if (t.mode === 'org' && durationSeconds > 0) {
+        void BusinessService.logVoiceUsage(t.organizationId, transcriptId, durationSeconds);
+      }
     }
   };
 
