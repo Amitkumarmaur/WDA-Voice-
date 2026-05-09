@@ -2,6 +2,9 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { GoogleGenAI, Type } from "npm:@google/genai";
 
+/** Gemini 3.1 Flash Live — keep in sync with `GEMINI_LIVE_MODEL` in `src/config/geminiLive.ts`. */
+const GEMINI_MODEL = "gemini-3.1-flash-live-preview";
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -49,7 +52,7 @@ Deno.serve(async (req) => {
       const mimeType = body.mimeType as string;
       const data = body.data as string;
       const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODEL,
         contents: [
           { inlineData: { mimeType, data } },
           {
@@ -64,7 +67,7 @@ Deno.serve(async (req) => {
       const mimeType = body.mimeType as string;
       const data = body.data as string;
       const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODEL,
         contents: [
           { inlineData: { mimeType, data } },
           {
@@ -112,7 +115,7 @@ Deno.serve(async (req) => {
     if (action === "analyze_kb") {
       const prompt = body.prompt as string;
       const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODEL,
         contents: prompt,
       });
       return Response.json({ text: result.text ?? "" }, { headers: cors });
