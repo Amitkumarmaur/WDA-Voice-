@@ -9,6 +9,7 @@ import {
   Building2,
   Calendar,
   ChevronRight,
+  LayoutGrid,
   Loader2,
   Mail,
   Mic,
@@ -34,6 +35,52 @@ function fmtDate(iso: string | null | undefined): string {
   }
 }
 
+type OrgQuotaRow = {
+  organization_id: string;
+  org_name: string | null;
+  public_slug: string | null;
+  subscription_status: string | null;
+  monthly_voice_minutes_used: number;
+  monthly_voice_minutes_limit: number;
+};
+
+function aggregateOrgQuotas(rows: AdminDirectoryRow[]): OrgQuotaRow[] {
+  const map = new Map<string, OrgQuotaRow>();
+  for (const r of rows) {
+    if (!r.organization_id) continue;
+    if (!map.has(r.organization_id)) {
+      map.set(r.organization_id, {
+        organization_id: r.organization_id,
+        org_name: r.org_name,
+        public_slug: r.public_slug,
+        subscription_status: r.subscription_status,
+        monthly_voice_minutes_used: n(r.monthly_voice_minutes_used),
+        monthly_voice_minutes_limit: Math.max(0, n(r.monthly_voice_minutes_limit)),
+      });
+    }
+  }
+  return [...map.values()].sort((a, b) => {
+    const ra =
+      a.monthly_voice_minutes_limit > 0
+        ? a.monthly_voice_minutes_used / a.monthly_voice_minutes_limit
+        : a.monthly_voice_minutes_used > 0
+          ? 2
+          : 0;
+    const rb =
+      b.monthly_voice_minutes_limit > 0
+        ? b.monthly_voice_minutes_used / b.monthly_voice_minutes_limit
+        : b.monthly_voice_minutes_used > 0
+          ? 2
+          : 0;
+    return rb - ra;
+  });
+}
+
+function quotaPct(used: number, limit: number): number {
+  if (limit <= 0) return used > 0 ? 100 : 0;
+  return Math.min(100, (used / limit) * 100);
+}
+
 export default function AdminDashboard() {
   const [rows, setRows] = useState<AdminDirectoryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +89,7 @@ export default function AdminDashboard() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [adminView, setAdminView] = useState<'directory' | 'voice_quotas'>('directory');
 
   const loadDirectory = useCallback(async () => {
     setLoading(true);
@@ -103,6 +151,19 @@ export default function AdminDashboard() {
     return [...map.values()];
   }, [filtered]);
 
+  const orgQuotas = useMemo(() => aggregateOrgQuotas(rows), [rows]);
+
+  const quotaFiltered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return orgQuotas;
+    return orgQuotas.filter((o) => {
+      const name = (o.org_name || '').toLowerCase();
+      const slug = (o.public_slug || '').toLowerCase();
+      const id = o.organization_id.toLowerCase();
+      return name.includes(q) || slug.includes(q) || id.includes(q);
+    });
+  }, [orgQuotas, query]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -115,15 +176,41 @@ export default function AdminDashboard() {
             <p className="text-sm text-slate-500">All registered users and their workspaces (read-only).</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadDirectory()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-slate-200 bg-slate-50/80 p-0.5">
+            <button
+              type="button"
+              onClick={() => setAdminView('directory')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors',
+                adminView === 'directory' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Users
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminView('voice_quotas')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors',
+                adminView === 'voice_quotas' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              )}
+            >
+              <Mic className="w-3.5 h-3.5" />
+              Voice quotas
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadDirectory()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -134,13 +221,80 @@ export default function AdminDashboard() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="search"
-          placeholder="Search by email, name, org, or slug…"
+          placeholder={
+            adminView === 'directory'
+              ? 'Search by email, name, org, or slug…'
+              : 'Filter workspaces by name, slug, or org id…'
+          }
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 outline-none"
         />
       </div>
 
+      {adminView === 'voice_quotas' ? (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <LayoutGrid className="w-4 h-4 text-violet-500" />
+            Workspaces — voice minutes ({quotaFiltered.length})
+          </div>
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto max-h-[min(75vh,640px)] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-100 bg-slate-50/80">
+                    <th className="px-4 py-3 font-semibold">Workspace</th>
+                    <th className="px-4 py-3 font-semibold">Slug</th>
+                    <th className="px-4 py-3 font-semibold">Plan</th>
+                    <th className="px-4 py-3 font-semibold min-w-[200px]">Usage</th>
+                    <th className="px-4 py-3 font-semibold text-right">Used / limit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {quotaFiltered.map((o) => {
+                    const pct = quotaPct(o.monthly_voice_minutes_used, o.monthly_voice_minutes_limit);
+                    const over = o.monthly_voice_minutes_limit <= 0 && o.monthly_voice_minutes_used > 0;
+                    const barColor =
+                      pct >= 100 || over ? 'bg-rose-500' : pct >= 90 ? 'bg-amber-500' : 'bg-violet-500';
+                    return (
+                      <tr key={o.organization_id} className="hover:bg-slate-50/80">
+                        <td className="px-4 py-3 font-medium text-slate-900">{o.org_name || '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">{o.public_slug || '—'}</td>
+                        <td className="px-4 py-3 capitalize text-slate-700">{o.subscription_status || '—'}</td>
+                        <td className="px-4 py-3">
+                          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className={cn('h-full rounded-full transition-all', barColor)}
+                              style={{ width: `${Math.min(100, pct)}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-800">
+                          {o.monthly_voice_minutes_used.toFixed(1)} /{' '}
+                          {o.monthly_voice_minutes_limit > 0 ? o.monthly_voice_minutes_limit : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {quotaFiltered.length === 0 && (
+                <p className="px-4 py-12 text-center text-sm text-slate-500">No workspaces match your filter.</p>
+              )}
+            </div>
+          )}
+          <div className="px-4 py-3 border-t border-slate-100 text-xs text-slate-500 bg-slate-50/50">
+            Minutes roll up per workspace (<span className="font-mono">organizations.monthly_voice_minutes_*</span>
+            ). Edge Functions block Gemini Live tokens and generate calls when used ≥ limit (requires{' '}
+            <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span> on those functions).
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -219,6 +373,8 @@ export default function AdminDashboard() {
         Directory rows include one entry per organization membership. Open a user to see every workspace, billing hints,
         agent settings, voice profile, and recent activity.
       </div>
+      </>
+      )}
     </div>
   );
 }

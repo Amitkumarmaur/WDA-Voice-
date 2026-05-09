@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { GoogleGenAI, Type } from "npm:@google/genai";
 
 /** Gemini 3.1 Flash Live — keep in sync with `GEMINI_LIVE_MODEL` in `src/config/geminiLive.ts`. */
@@ -9,6 +9,33 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+async function voiceQuotaBlockResponse(
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<Response | null> {
+  const { data: org, error } = await admin
+    .from("organizations")
+    .select("monthly_voice_minutes_used, monthly_voice_minutes_limit")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error || !org) {
+    return Response.json({ error: "Organization not found", code: "org_not_found" }, { status: 404, headers: cors });
+  }
+  const used = Number(org.monthly_voice_minutes_used ?? 0);
+  const limit = Number(org.monthly_voice_minutes_limit ?? 0);
+  if (used >= limit) {
+    return Response.json(
+      {
+        error:
+          "Monthly voice minutes quota reached for this workspace. Upgrade or wait until usage resets.",
+        code: "voice_quota_exceeded",
+      },
+      { status: 402, headers: cors },
+    );
+  }
+  return null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -42,6 +69,17 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!mem?.organization_id) {
       return Response.json({ error: "No organization" }, { status: 403, headers: cors });
+    }
+
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (serviceKey) {
+      const admin = createClient(supabaseUrl, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const blocked = await voiceQuotaBlockResponse(admin, mem.organization_id);
+      if (blocked) return blocked;
+    } else {
+      console.warn("gemini-generate: SUPABASE_SERVICE_ROLE_KEY unset; voice quota not enforced");
     }
 
     const body = (await req.json()) as Record<string, unknown>;

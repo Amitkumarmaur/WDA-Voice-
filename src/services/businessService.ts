@@ -94,6 +94,7 @@ export const BusinessService = {
       const { data, error } = await supabase.rpc('save_public_transcript', {
         p_slug: tenant.slug,
         p_messages: payload,
+        p_duration_seconds: durationSeconds ?? null,
       });
       if (error) throw error;
       return data as string;
@@ -112,16 +113,26 @@ export const BusinessService = {
   },
 
   async logVoiceUsage(
-    organizationId: string,
+    tenant: TenantRef,
     transcriptId: string | undefined,
     durationSeconds: number
   ): Promise<void> {
-    if (durationSeconds <= 0) return;
+    if (durationSeconds <= 0 || !transcriptId) return;
     const supabase = getSupabase();
+    const secs = Math.round(durationSeconds);
+    if (tenant.mode === 'public') {
+      const { error } = await supabase.rpc('log_public_voice_usage', {
+        p_slug: tenant.slug,
+        p_transcript_id: transcriptId,
+        p_duration_seconds: secs,
+      });
+      if (error) console.warn('logVoiceUsage failed:', error.message);
+      return;
+    }
     const { error } = await supabase.rpc('log_voice_usage', {
-      p_organization_id: organizationId,
-      p_transcript_id: transcriptId ?? null,
-      p_duration_seconds: Math.round(durationSeconds),
+      p_organization_id: tenant.organizationId,
+      p_transcript_id: transcriptId,
+      p_duration_seconds: secs,
     });
     if (error) console.warn('logVoiceUsage failed:', error.message);
   },

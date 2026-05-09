@@ -266,8 +266,14 @@ export default function VoiceAgent({
       },
       body: JSON.stringify(tokenBody),
     });
-    const tokenJson = (await tokenRes.json()) as { apiKey?: string; error?: string };
+    const tokenJson = (await tokenRes.json()) as { apiKey?: string; error?: string; code?: string };
     if (!tokenRes.ok || !tokenJson.apiKey) {
+      if (tokenJson.code === 'voice_quota_exceeded') {
+        throw new Error(
+          tokenJson.error ||
+            'This workspace has used all included voice minutes for the current period. Try again after your quota resets or upgrade your plan.'
+        );
+      }
       throw new Error(tokenJson.error || 'Failed to get voice session token');
     }
     const apiKey = tokenJson.apiKey;
@@ -684,8 +690,8 @@ export default function VoiceAgent({
     const t = tenantRef.current;
     if (snap.length > 0 && t) {
       const transcriptId = await BusinessService.saveTranscript(t, snap, durationSeconds);
-      if (t.mode === 'org' && durationSeconds > 0) {
-        void BusinessService.logVoiceUsage(t.organizationId, transcriptId, durationSeconds);
+      if (durationSeconds > 0 && transcriptId) {
+        void BusinessService.logVoiceUsage(t, transcriptId, durationSeconds);
       }
     }
   };
