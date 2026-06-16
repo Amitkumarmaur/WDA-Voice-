@@ -53,44 +53,46 @@ const prebuiltLower = new Map<string, GeminiLivePrebuiltVoice>(
 );
 
 /**
- * Production voice picker — three mature-sounding adult-female Gemini Live voices,
- * picked to sound like a polished professional woman rather than a youthful/childish
- * tone. Each maps to one of the three core SaaS agent registers: sweet, energetic,
- * confident.
+ * Production voice picker — three of the most grounded adult-female Gemini Live
+ * voices, picked specifically to avoid the cartoonish/over-expressive feel of
+ * the more performative voices in the catalog. These are the "broadcast / news
+ * anchor" register: smooth, clear, gentle.
  *
- *   Sulafat    — warm, rich; the "beautiful warm woman" register (sweet).
- *   Laomedeia  — upbeat, bright; lively without sounding childlike (energetic).
- *   Pulcherrima — forward, expressive; assured and commanding (confident).
+ *   Despina      — smooth, level (poised professional).
+ *   Erinome      — clear, articulate (broadcast clarity).
+ *   Vindemiatrix — gentle, warm (calm adult warmth).
  *
  * The full Gemini Live catalog (30 voices) is still validated against
  * GEMINI_LIVE_PREBUILT_VOICE_NAMES above for resilience, but only these three
- * are surfaced in the UI to keep the picker focused on the intended brand voice.
+ * are surfaced in the UI. Combine these with a non-theatrical system prompt
+ * (no "smile while speaking" / "raise energy when excited") to keep delivery
+ * realistic.
  */
 export const GEMINI_LIVE_UI_VOICES = [
   {
-    id: 'voice_sulafat',
-    label: 'Sulafat',
-    description: 'Sweet & warm — beautiful, rich adult woman',
-    engine: 'Sulafat' as const,
+    id: 'voice_despina',
+    label: 'Despina',
+    description: 'Smooth & level — poised broadcast-style',
+    engine: 'Despina' as const,
   },
   {
-    id: 'voice_laomedeia',
-    label: 'Laomedeia',
-    description: 'Energetic & upbeat — lively, engaging',
-    engine: 'Laomedeia' as const,
+    id: 'voice_erinome',
+    label: 'Erinome',
+    description: 'Clear & articulate — newscaster precision',
+    engine: 'Erinome' as const,
   },
   {
-    id: 'voice_pulcherrima',
-    label: 'Pulcherrima',
-    description: 'Confident & forward — assured, commanding',
-    engine: 'Pulcherrima' as const,
+    id: 'voice_vindemiatrix',
+    label: 'Vindemiatrix',
+    description: 'Gentle & warm — calm adult warmth',
+    engine: 'Vindemiatrix' as const,
   },
 ];
 
 export type GeminiLiveUIVoice = (typeof GEMINI_LIVE_UI_VOICES)[number];
 
 export function normalizeGeminiLiveVoice(raw: string | undefined | null): GeminiLivePrebuiltVoice {
-  if (raw == null || typeof raw !== 'string') return 'Sulafat';
+  if (raw == null || typeof raw !== 'string') return 'Despina';
   const hit = prebuiltLower.get(raw.trim().toLowerCase());
-  return hit ?? 'Sulafat';
+  return hit ?? 'Despina';
 }
