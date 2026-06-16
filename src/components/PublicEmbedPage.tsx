@@ -4,7 +4,7 @@ import { getSupabase, isSupabaseEnvConfigured } from '../lib/supabase';
 import { TenantProvider } from '../lib/tenantContext';
 import VoiceAgent from './VoiceAgent';
 import { KnowledgeItem, VoicePersona, VoiceProfile } from '../types';
-import { VOICE_PERSONAS } from '../constants';
+import { VOICE_PERSONAS, DEFAULT_AGENT_INTRO } from '../constants';
 import { Loader2, Phone } from 'lucide-react';
 
 type Bundle = {
@@ -123,9 +123,7 @@ export default function PublicEmbedPage() {
 
   const persona: VoicePersona | null =
     VOICE_PERSONAS.find((p) => p.id === bundle.agent_settings.persona_id) ?? VOICE_PERSONAS[0];
-  const intro =
-    bundle.agent_settings.intro ||
-    'Hello, thanks for reaching out. How can I help you today?';
+  const intro = bundle.agent_settings.intro?.trim() || DEFAULT_AGENT_INTRO;
   const language = bundle.agent_settings.language === 'hindi' ? 'hindi' : 'english';
 
   const tenant = {

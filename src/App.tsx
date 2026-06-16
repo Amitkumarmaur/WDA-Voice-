@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseEnvConfigured } from './lib/supabase';
 import { TenantProvider, type TenantRef } from './lib/tenantContext';
@@ -19,7 +19,7 @@ import {
 import { Link } from 'react-router-dom';
 import { VoiceraLogo } from './components/VoiceraLogo';
 import { cn } from './lib/utils';
-import { VOICE_PERSONAS } from './constants';
+import { VOICE_PERSONAS, DEFAULT_AGENT_INTRO } from './constants';
 import { KnowledgeBaseService } from './services/knowledgeBaseService';
 import { AgentSettingsService } from './services/agentSettingsService';
 import { VoiceService } from './services/voiceService';
@@ -42,13 +42,37 @@ export default function App() {
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
   const [activeVoiceProfile, setActiveVoiceProfile] = useState<VoiceProfile | null>(null);
   const [activePersona, setActivePersona] = useState<VoicePersona | null>(VOICE_PERSONAS[0]);
-  const [language, setLanguage] = useState<'hindi' | 'english'>('hindi');
-  const [intro, setIntro] = useState<string>(() => {
-    return localStorage.getItem('voiceAgent_intro') || '';
-  });
+  const [language, setLanguage] = useState<'hindi' | 'english'>('english');
+  const [intro, setIntro] = useState<string>('');
   const [oauthError, setOauthError] = useState<string | null>(null);
+  /** Skip one persist cycle after hydrating agent settings from the org (avoids leaking prior session state). */
+  const skipNextPersistRef = useRef(true);
+
+  const resetAgentSession = useCallback(() => {
+    setOrganizationId(null);
+    setOrgRow(null);
+    setKnowledgeItems([]);
+    setActiveVoiceProfile(null);
+    setIsPlatformAdmin(false);
+    setIntro('');
+    setActivePersona(VOICE_PERSONAS[0] ?? null);
+    setLanguage('english');
+    skipNextPersistRef.current = true;
+    try {
+      localStorage.removeItem('voiceAgent_intro');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const loadWorkspace = useCallback(async (uid: string) => {
+    skipNextPersistRef.current = true;
+    setIntro('');
+    setActivePersona(VOICE_PERSONAS[0] ?? null);
+    setLanguage('english');
+    setKnowledgeItems([]);
+    setActiveVoiceProfile(null);
+
     const supabase = getSupabase();
     const { data: mem } = await supabase
       .from('organization_members')
@@ -91,21 +115,13 @@ export default function App() {
     setKnowledgeItems(items);
     setActiveVoiceProfile(profile);
 
-    if (settings) {
-      if (settings.intro) setIntro(settings.intro);
-      else if (!settings.intro && !localStorage.getItem('voiceAgent_intro')) {
-        setIntro(
-          'Jai Hind, Main Warriors Defence Academy se baat kar rahi hoon, aapka call aaya tha, aapko koi information chahiye thi?'
-        );
-      }
-      if (settings.persona_id) {
-        const p = VOICE_PERSONAS.find((x) => x.id === settings.persona_id);
-        if (p) setActivePersona(p);
-      }
-      if (settings.language === 'hindi' || settings.language === 'english') {
-        setLanguage(settings.language);
-      }
-    }
+    skipNextPersistRef.current = true;
+    setIntro(settings?.intro?.trim() ? settings.intro : '');
+    const persona = settings?.persona_id
+      ? VOICE_PERSONAS.find((x) => x.id === settings.persona_id)
+      : null;
+    setActivePersona(persona ?? VOICE_PERSONAS[0] ?? null);
+    setLanguage(settings?.language === 'hindi' || settings?.language === 'english' ? settings.language : 'english');
   }, []);
 
   useEffect(() => {
@@ -122,11 +138,7 @@ export default function App() {
       if (session?.user) {
         void loadWorkspace(session.user.id);
       } else {
-        setOrganizationId(null);
-        setOrgRow(null);
-        setKnowledgeItems([]);
-        setActiveVoiceProfile(null);
-        setIsPlatformAdmin(false);
+        resetAgentSession();
       }
     });
 
@@ -137,7 +149,7 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, [loadWorkspace, supabaseConfigured]);
+  }, [loadWorkspace, resetAgentSession, supabaseConfigured]);
 
   useEffect(() => {
     if (user?.id) setActiveMainTab('workspace');
@@ -171,6 +183,10 @@ export default function App() {
 
   useEffect(() => {
     if (!supabaseConfigured || !organizationId || !user) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
     const t = setTimeout(() => {
       void AgentSettingsService.upsert(organizationId, {
         intro,
@@ -180,10 +196,6 @@ export default function App() {
     }, 800);
     return () => clearTimeout(t);
   }, [intro, activePersona?.id, language, organizationId, user, supabaseConfigured]);
-
-  useEffect(() => {
-    localStorage.setItem('voiceAgent_intro', intro);
-  }, [intro]);
 
   useEffect(() => {
     if (!supabaseConfigured) return;
@@ -397,10 +409,7 @@ export default function App() {
                   voiceProfile={activeVoiceProfile}
                   selectedPersona={activePersona}
                   language={language}
-                  intro={
-                    intro ||
-                    'Hello, thanks for reaching out. How can I help you today?'
-                  }
+                  intro={intro.trim() || DEFAULT_AGENT_INTRO}
                 />
               </div>
             </div>

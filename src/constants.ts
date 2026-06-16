@@ -1,5 +1,9 @@
 import { VoicePersona } from './types';
 
+/** Neutral greeting used when an org has no custom intro saved yet. */
+export const DEFAULT_AGENT_INTRO =
+  'Hello, thanks for reaching out. How can I help you today?';
+
 /**
  * Personas reference Despina / Erinome / Sulafat — the three voices surfaced in
  * the UI picker (src/config/geminiLive.ts).
