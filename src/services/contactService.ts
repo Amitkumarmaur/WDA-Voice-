@@ -3,6 +3,7 @@ import { getSupabaseUrl, isSupabaseEnvConfigured } from '../lib/supabase';
 export type ContactPayload = {
   name: string;
   email: string;
+  company?: string;
   message: string;
   /** Honeypot — must stay empty */
   website?: string;
@@ -27,6 +28,7 @@ export async function submitContactForm(payload: ContactPayload): Promise<void> 
     body: JSON.stringify({
       name: payload.name,
       email: payload.email,
+      company: payload.company ?? '',
       message: payload.message,
       website: payload.website ?? '',
     }),

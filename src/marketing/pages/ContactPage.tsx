@@ -58,6 +58,7 @@ export function ContactPage() {
                 const fd = new FormData(form);
                 const name = String(fd.get('name') ?? '').trim();
                 const email = String(fd.get('email') ?? '').trim();
+                const company = String(fd.get('company') ?? '').trim();
                 const message = String(fd.get('message') ?? '').trim();
                 const website = String(fd.get('website') ?? '').trim();
 
@@ -68,7 +69,7 @@ export function ContactPage() {
 
                 setSubmitting(true);
                 try {
-                  await submitContactForm({ name, email, message, website });
+                  await submitContactForm({ name, email, company, message, website });
                   setPhase('success');
                   form.reset();
                 } catch (err) {
@@ -111,6 +112,17 @@ export function ContactPage() {
                 className="type-body mt-1 w-full min-h-11 rounded-md border border-hairline bg-surface-1 px-3.5 py-2.5 text-ink disabled:opacity-60"
                 autoComplete="email"
                 maxLength={320}
+              />
+            </label>
+            <label className="block type-body-sm">
+              <span className="text-ink-muted">Company <span className="text-ink-tertiary">(optional)</span></span>
+              <input
+                name="company"
+                disabled={submitting || !configured}
+                className="type-body mt-1 w-full min-h-11 rounded-md border border-hairline bg-surface-1 px-3.5 py-2.5 text-ink placeholder:text-ink-tertiary disabled:opacity-60"
+                placeholder="Acme Logistics"
+                autoComplete="organization"
+                maxLength={200}
               />
             </label>
             <label className="block type-body-sm">
