@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   try {
     const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
     const priceId = Deno.env.get("STRIPE_PRICE_ID");
-    const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:3000";
+    const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:2000";
 
     if (!stripeSecret) {
       return Response.json({ error: "Missing STRIPE_SECRET_KEY" }, { status: 500, headers: cors });

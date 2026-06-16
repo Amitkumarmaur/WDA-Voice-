@@ -42,6 +42,7 @@ const captureLeadDeclaration: FunctionDeclaration = {
     properties: {
       name: { type: Type.STRING, description: "Client's full name" },
       email: { type: Type.STRING, description: "Client's email address" },
+      phone: { type: Type.STRING, description: "Client's phone number, if provided" },
       interest: { type: Type.STRING, description: "Product or service interest" }
     },
     required: ["name", "email"]
@@ -56,6 +57,7 @@ const scheduleAppointmentDeclaration: FunctionDeclaration = {
     properties: {
       name: { type: Type.STRING },
       email: { type: Type.STRING },
+      phone: { type: Type.STRING, description: "Client's phone number, if provided" },
       date: { type: Type.STRING, description: "ISO 8601 date string" },
       notes: { type: Type.STRING }
     },

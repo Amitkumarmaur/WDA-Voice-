@@ -16,6 +16,7 @@ export const BusinessService = {
         p_email: lead.email,
         p_interest: lead.interest ?? null,
         p_conversation_id: lead.conversationId ?? null,
+        p_phone: lead.phone ?? null,
       });
       if (error) throw error;
       return data as string;
@@ -58,6 +59,7 @@ export const BusinessService = {
         p_email: appointment.email,
         p_date: date,
         p_notes: appointment.notes ?? null,
+        p_phone: appointment.phone ?? null,
       });
       if (error) throw error;
       return data as string;

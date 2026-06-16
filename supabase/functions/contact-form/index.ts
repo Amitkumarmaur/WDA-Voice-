@@ -56,16 +56,15 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { error: insErr } = await admin.from("contact_inquiries").insert({
+    const { error: insErr } = await admin.from("contact_submissions").insert({
       name,
       email,
       company: company || null,
       message,
-      source: "contact_form",
     });
 
     if (insErr) {
-      console.error("contact_inquiries insert", insErr);
+      console.error("contact_submissions insert", insErr);
       return Response.json({ error: "Could not save message" }, { status: 500, headers: cors });
     }
 
