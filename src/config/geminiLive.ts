@@ -53,42 +53,44 @@ const prebuiltLower = new Map<string, GeminiLivePrebuiltVoice>(
 );
 
 /**
- * Production voice picker — the three most human-sounding Gemini Live voices,
- * selected for a SaaS support / sales / customer-success agent.
+ * Production voice picker — three mature-sounding adult-female Gemini Live voices,
+ * picked to sound like a polished professional woman rather than a youthful/childish
+ * tone. Each maps to one of the three core SaaS agent registers: sweet, energetic,
+ * confident.
  *
- *   Aoede — warm, conversational; most natural for empathetic support flows.
- *   Leda  — lively, youthful; best for outbound sales & customer-success cadence.
- *   Kore  — professional, steady; clearest articulation for explanations.
+ *   Sulafat    — warm, rich; the "beautiful warm woman" register (sweet).
+ *   Laomedeia  — upbeat, bright; lively without sounding childlike (energetic).
+ *   Pulcherrima — forward, expressive; assured and commanding (confident).
  *
  * The full Gemini Live catalog (30 voices) is still validated against
- * GEMINI_LIVE_PREBUILT_VOICE_NAMES above for resilience, but only these
- * three are surfaced in the UI to keep the picker focused.
+ * GEMINI_LIVE_PREBUILT_VOICE_NAMES above for resilience, but only these three
+ * are surfaced in the UI to keep the picker focused on the intended brand voice.
  */
 export const GEMINI_LIVE_UI_VOICES = [
   {
-    id: 'voice_aoede',
-    label: 'Aoede',
-    description: 'Warm & conversational — most natural for support',
-    engine: 'Aoede' as const,
+    id: 'voice_sulafat',
+    label: 'Sulafat',
+    description: 'Sweet & warm — beautiful, rich adult woman',
+    engine: 'Sulafat' as const,
   },
   {
-    id: 'voice_leda',
-    label: 'Leda',
-    description: 'Lively & youthful — best for sales & onboarding',
-    engine: 'Leda' as const,
+    id: 'voice_laomedeia',
+    label: 'Laomedeia',
+    description: 'Energetic & upbeat — lively, engaging',
+    engine: 'Laomedeia' as const,
   },
   {
-    id: 'voice_kore',
-    label: 'Kore',
-    description: 'Professional & steady — clearest for explanations',
-    engine: 'Kore' as const,
+    id: 'voice_pulcherrima',
+    label: 'Pulcherrima',
+    description: 'Confident & forward — assured, commanding',
+    engine: 'Pulcherrima' as const,
   },
 ];
 
 export type GeminiLiveUIVoice = (typeof GEMINI_LIVE_UI_VOICES)[number];
 
 export function normalizeGeminiLiveVoice(raw: string | undefined | null): GeminiLivePrebuiltVoice {
-  if (raw == null || typeof raw !== 'string') return 'Aoede';
+  if (raw == null || typeof raw !== 'string') return 'Sulafat';
   const hit = prebuiltLower.get(raw.trim().toLowerCase());
-  return hit ?? 'Aoede';
+  return hit ?? 'Sulafat';
 }

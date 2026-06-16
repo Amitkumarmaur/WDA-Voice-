@@ -161,8 +161,8 @@ export default function VoiceAgent({
 
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
-    // Default to Aoede — most natural / human-sounding for support flows.
-    return 'voice_aoede';
+    // Default to Sulafat — warm, rich, mature adult-female voice.
+    return 'voice_sulafat';
   });
   const voiceManuallySetRef = useRef(false);
 
