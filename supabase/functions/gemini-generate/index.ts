@@ -159,6 +159,103 @@ Deno.serve(async (req) => {
       return Response.json({ text: result.text ?? "" }, { headers: cors });
     }
 
+    if (action === "scrape_url") {
+      const target = typeof body.url === "string" ? body.url.trim() : "";
+      let parsed: URL;
+      try {
+        parsed = new URL(target);
+      } catch {
+        return Response.json({ error: "Invalid URL" }, { status: 400, headers: cors });
+      }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return Response.json({ error: "Only http(s) URLs are supported" }, { status: 400, headers: cors });
+      }
+      // Block obvious private/loopback hosts to prevent SSRF from a logged-in user.
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host === "localhost" ||
+        host.endsWith(".localhost") ||
+        host === "0.0.0.0" ||
+        host.startsWith("127.") ||
+        host.startsWith("10.") ||
+        host.startsWith("169.254.") ||
+        host.startsWith("192.168.") ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+      ) {
+        return Response.json({ error: "URL not allowed" }, { status: 400, headers: cors });
+      }
+
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 15_000);
+      let res: Response;
+      try {
+        res = await fetch(parsed.toString(), {
+          method: "GET",
+          redirect: "follow",
+          signal: ac.signal,
+          headers: {
+            "user-agent": "VoiceraBot/1.0 (+https://voicera.app)",
+            accept: "text/html,application/xhtml+xml",
+          },
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        const msg = e instanceof Error ? e.message : String(e);
+        return Response.json({ error: `Fetch failed: ${msg}` }, { status: 502, headers: cors });
+      }
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        return Response.json({ error: `Upstream ${res.status}` }, { status: 502, headers: cors });
+      }
+      const ctype = res.headers.get("content-type") ?? "";
+      if (!ctype.includes("text/html") && !ctype.includes("application/xhtml")) {
+        return Response.json({ error: `Unsupported content-type: ${ctype}` }, { status: 415, headers: cors });
+      }
+
+      // Cap to ~2MB of raw HTML to keep memory bounded.
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let html = "";
+      if (reader) {
+        let read = 0;
+        const MAX_BYTES = 2 * 1024 * 1024;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            read += value.byteLength;
+            html += decoder.decode(value, { stream: true });
+            if (read >= MAX_BYTES) break;
+          }
+        }
+        html += decoder.decode();
+      } else {
+        html = await res.text();
+      }
+
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const title = (titleMatch?.[1] ?? parsed.hostname).replace(/\s+/g, " ").trim();
+
+      const text = html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+        .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<!--[\s\S]*?-->/g, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 50_000);
+
+      return Response.json({ title, text, url: parsed.toString() }, { headers: cors });
+    }
+
     return Response.json({ error: "Unknown action" }, { status: 400, headers: cors });
   } catch (e) {
     console.error(e);

@@ -85,9 +85,13 @@ export default function KnowledgeBaseManager({ organizationId, onUpdate }: Knowl
     if (!newUrl) return;
     setIsUploading(true);
     try {
+      const { title, text } = await KnowledgeBaseService.scrapeWebsite(newUrl);
+      if (!text) {
+        throw new Error('No readable content found at that URL.');
+      }
       await KnowledgeBaseService.addKnowledgeItem(organizationId, {
-        title: new URL(newUrl).hostname,
-        content: `Website content from ${newUrl}`,
+        title: title || new URL(newUrl).hostname,
+        content: text,
         source: newUrl,
         type: 'website',
       });
@@ -96,6 +100,7 @@ export default function KnowledgeBaseManager({ organizationId, onUpdate }: Knowl
       await loadItems();
     } catch (error) {
       console.error('Failed to add URL:', error);
+      alert(`Failed to add URL: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsUploading(false);
     }

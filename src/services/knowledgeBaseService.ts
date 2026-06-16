@@ -127,4 +127,12 @@ export const KnowledgeBaseService = {
     });
     return (out.text as string) || 'Transcription failed.';
   },
+
+  async scrapeWebsite(url: string): Promise<{ title: string; text: string }> {
+    const out = await invokeGeminiGenerate({ action: 'scrape_url', url });
+    return {
+      title: (out.title as string) || new URL(url).hostname,
+      text: sanitizeForPostgres((out.text as string) || ''),
+    };
+  },
 };
