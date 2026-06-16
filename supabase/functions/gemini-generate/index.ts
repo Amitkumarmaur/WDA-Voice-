@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
           { inlineData: { mimeType, data } },
           {
             text: `Analyze this voice sample and describe its characteristics in extreme detail.
-            Return JSON with keys: name, description, tone, pace, pitch, intonation, nuances, energyLevel, recommendedVoice (exactly one of: Despina, Erinome, Vindemiatrix — the grounded adult-female Gemini Live voices surfaced in this app's voice picker; choose Despina for smooth/poised, Erinome for clear/articulate, Vindemiatrix for gentle/warm).`,
+            Return JSON with keys: name, description, tone, pace, pitch, intonation, nuances, energyLevel, recommendedVoice (exactly one of: Despina, Erinome, Sulafat — the Gemini Live voices surfaced in this app's voice picker; choose Despina for smooth/poised, Erinome for clear/articulate, Sulafat for sweet/warm/melodic).`,
           },
         ],
         config: {
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
               recommendedVoice: {
                 type: Type.STRING,
                 format: 'enum',
-                enum: ['Despina', 'Erinome', 'Vindemiatrix'],
+                enum: ['Despina', 'Erinome', 'Sulafat'],
                 description: 'Closest Gemini Live prebuilt voice for this sample (must match the app voice picker).',
               },
             },

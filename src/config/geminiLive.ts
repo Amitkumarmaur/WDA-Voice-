@@ -63,7 +63,7 @@ const prebuiltLower = new Map<string, GeminiLivePrebuiltVoice>(
  *
  *   Despina      — smooth, level (poised professional).
  *   Erinome      — clear, articulate (broadcast clarity).
- *   Vindemiatrix — gentle, warm (calm adult warmth).
+ *   Sulafat      — warm, sweet (soft melodic tone — Indian playback-singer register).
  *
  * The full Gemini Live catalog (30 voices) is still validated against
  * GEMINI_LIVE_PREBUILT_VOICE_NAMES above for resilience, but only these three
@@ -85,10 +85,10 @@ export const GEMINI_LIVE_UI_VOICES = [
     engine: 'Erinome' as const,
   },
   {
-    id: 'voice_vindemiatrix',
-    label: 'Vindemiatrix',
-    description: 'Gentle & warm — calm adult warmth',
-    engine: 'Vindemiatrix' as const,
+    id: 'voice_sulafat',
+    label: 'Sulafat',
+    description: 'Sweet & warm — soft melodic Indian tone',
+    engine: 'Sulafat' as const,
   },
 ];
 
@@ -96,6 +96,9 @@ export type GeminiLiveUIVoice = (typeof GEMINI_LIVE_UI_VOICES)[number];
 
 export function normalizeGeminiLiveVoice(raw: string | undefined | null): GeminiLivePrebuiltVoice {
   if (raw == null || typeof raw !== 'string') return 'Despina';
-  const hit = prebuiltLower.get(raw.trim().toLowerCase());
+  const trimmed = raw.trim().toLowerCase();
+  // Vindemiatrix was replaced by Sulafat for a sweeter, warmer delivery.
+  if (trimmed === 'vindemiatrix') return 'Sulafat';
+  const hit = prebuiltLower.get(trimmed);
   return hit ?? 'Despina';
 }

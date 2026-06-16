@@ -161,6 +161,15 @@ export default function VoiceAgent({
     const entry = BEAUTIFUL_VOICES.find((v) => v.engine === engine);
     if (entry) setVoiceName(entry.id);
   }, [selectedPersona?.id, selectedPersona?.voiceName]);
+
+  const resolveSelectedVoiceEngine = useCallback(() => {
+    return normalizeGeminiLiveVoice(
+      BEAUTIFUL_VOICES.find((v) => v.id === voiceName)?.engine ||
+        voiceProfile?.recommendedVoice ||
+        selectedPersona?.voiceName ||
+        'Despina'
+    );
+  }, [voiceName, voiceProfile?.recommendedVoice, selectedPersona?.voiceName]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -384,6 +393,14 @@ export default function VoiceAgent({
         - Do NOT rise dramatically on important words. Articulate them clearly instead.
         - Do NOT bounce intonation up and down. Speak like a poised radio newsreader on a slow story, not a children's show host.
 
+        ${resolveSelectedVoiceEngine() === 'Sulafat' ? `
+        # SWEET MELODIC VOICE (Sulafat — Indian playback-singer warmth):
+        - Speak with soft, sweet warmth — like a polished Indian playback singer in a gentle one-to-one conversation, not a stage performance.
+        - Let phrases flow with a light natural melody; round vowels slightly and keep the tone inviting and caring.
+        - Stay in an adult female register: sweet and melodious, never squeaky, childlike, or cartoonishly sing-song.
+        - In Hindi, keep the same sweet warmth — gentle cadence, soft "ji", and a familiar singer-like softness.
+        ` : ''}
+
         ${voiceProfile ? `
         # VOICE PROFILE (subtle guidance only — do NOT act theatrically):
         Match this delivery style with a calm, natural adult female voice: TONE(${voiceProfile.tone}), PITCH(${voiceProfile.pitch}), PACE(${voiceProfile.pace}), INTONATION(${voiceProfile.intonation}), ENERGY(${voiceProfile.energyLevel}), NUANCES(${voiceProfile.nuances}). Keep pitch in a normal adult female range — never childlike, squeaky, or cartoonish.
@@ -414,12 +431,7 @@ export default function VoiceAgent({
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
-              voiceName: normalizeGeminiLiveVoice(
-                BEAUTIFUL_VOICES.find((v) => v.id === voiceName)?.engine ||
-                  voiceProfile?.recommendedVoice ||
-                  selectedPersona?.voiceName ||
-                  'Despina'
-              ),
+              voiceName: resolveSelectedVoiceEngine(),
             },
           },
         },
@@ -790,11 +802,33 @@ export default function VoiceAgent({
       playbackCtxRef.current = new AudioContext({ sampleRate: GEMINI_LIVE_OUTPUT_SAMPLE_RATE });
       const setupCtx = playbackCtxRef.current;
       const t = setupCtx.currentTime;
+      const useSweetChain = resolveSelectedVoiceEngine() === 'Sulafat';
 
-      // Clean playback — no EQ/compression. Heavy processing was making speech sound synthetic/cartoonish.
       playbackGainNodeRef.current = setupCtx.createGain();
       playbackGainNodeRef.current.gain.setValueAtTime(volume, t);
       playbackGainNodeRef.current.connect(setupCtx.destination);
+
+      if (useSweetChain) {
+        // Light warmth + melodic presence for Sulafat — Indian playback-singer sweetness without heavy processing.
+        const warmth = setupCtx.createBiquadFilter();
+        warmth.type = 'peaking';
+        warmth.frequency.setValueAtTime(320, t);
+        warmth.Q.setValueAtTime(0.85, t);
+        warmth.gain.setValueAtTime(1.5, t);
+
+        const melody = setupCtx.createBiquadFilter();
+        melody.type = 'peaking';
+        melody.frequency.setValueAtTime(2100, t);
+        melody.Q.setValueAtTime(1.0, t);
+        melody.gain.setValueAtTime(1.5, t);
+
+        warmth.connect(melody);
+        melody.connect(playbackGainNodeRef.current);
+        (setupCtx as { _entryNode?: AudioNode })._entryNode = warmth;
+      } else {
+        (setupCtx as { _entryNode?: AudioNode })._entryNode = undefined;
+      }
+
       nextPlaybackTimeRef.current = setupCtx.currentTime + 0.02;
     }
 
@@ -813,7 +847,8 @@ export default function VoiceAgent({
       startTime = ctx.currentTime + 0.03;
     }
 
-    source.connect(playbackGainNodeRef.current ?? ctx.destination);
+    const entryNode = (ctx as { _entryNode?: AudioNode })._entryNode;
+    source.connect(entryNode ?? playbackGainNodeRef.current ?? ctx.destination);
     source.start(startTime);
     activeSourcesRef.current.add(source);
 

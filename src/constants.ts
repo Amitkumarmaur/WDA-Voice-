@@ -1,11 +1,8 @@
 import { VoicePersona } from './types';
 
 /**
- * Personas only reference Despina / Erinome / Vindemiatrix — the three voices
- * surfaced in the UI picker (src/config/geminiLive.ts). These are the most
- * grounded, broadcast-style adult-female voices in the Gemini Live catalog,
- * chosen to avoid the cartoonish/over-expressive feel of more performative
- * voices like Aoede, Leda, Laomedeia.
+ * Personas reference Despina / Erinome / Sulafat — the three voices surfaced in
+ * the UI picker (src/config/geminiLive.ts).
  */
 export const VOICE_PERSONAS: VoicePersona[] = [
   {
@@ -60,24 +57,24 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     id: 'calm-reassuring',
     name: 'Aisha — Calm & Reassuring',
     description: 'Deeply empathetic, slow pace, soothing.',
-    voiceName: 'Vindemiatrix',
+    voiceName: 'Sulafat',
     systemInstruction:
-      'You are Aisha, a calm, deeply empathetic, and reassuring assistant. Speak slowly and soothingly, prioritizing comfort and understanding.',
+      'You are Aisha, a calm, deeply empathetic, and reassuring assistant. Speak slowly with a soft, sweet, melodious tone — like a polished Indian playback singer on a gentle ballad. Warm and soothing, never flat or cold.',
   },
   {
     id: 'gentle-kind',
     name: 'Aisha — Gentle & Kind',
     description: 'Soft, empathetic, and slow.',
-    voiceName: 'Vindemiatrix',
+    voiceName: 'Sulafat',
     systemInstruction:
-      'You are Aisha, a gentle, kind, and soft-spoken assistant. Speak with empathy and patience, keeping a slow, soothing pace.',
+      'You are Aisha, a gentle, kind, and soft-spoken assistant. Speak with sweet warmth and a light melodic lilt — soft and caring like a familiar Indian singer\'s voice, with empathy and patience.',
   },
   {
     id: 'playful-cheerful',
     name: 'Aisha — Playful & Cheerful',
     description: 'Lighthearted, warm, conversational.',
-    voiceName: 'Vindemiatrix',
+    voiceName: 'Sulafat',
     systemInstruction:
-      'You are Aisha, a warm and lightly cheerful assistant. Keep the tone friendly and conversational without becoming bouncy or sing-song.',
+      'You are Aisha, a warm and lightly cheerful assistant. Keep a sweet, welcoming tone with gentle melodic warmth — friendly and conversational, never bouncy or cartoonish.',
   },
 ];
