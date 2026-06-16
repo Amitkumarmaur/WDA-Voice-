@@ -12,6 +12,9 @@
 
 export const GEMINI_LIVE_MODEL = 'gemini-3.1-flash-live-preview';
 
+/** Gemini Live native audio output is always 16-bit PCM mono at 24 kHz. */
+export const GEMINI_LIVE_OUTPUT_SAMPLE_RATE = 24000;
+
 /** All documented prebuilt voice names for Live / speech generation (canonical casing). */
 export const GEMINI_LIVE_PREBUILT_VOICE_NAMES = [
   'Zephyr',

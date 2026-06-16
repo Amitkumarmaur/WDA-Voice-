@@ -10,6 +10,7 @@ import { useTenant } from '../lib/tenantContext';
 import { getSupabase, getSupabaseUrl, isSupabaseEnvConfigured } from '../lib/supabase';
 import {
   GEMINI_LIVE_MODEL,
+  GEMINI_LIVE_OUTPUT_SAMPLE_RATE,
   GEMINI_LIVE_UI_VOICES,
   normalizeGeminiLiveVoice,
 } from '../config/geminiLive';
@@ -97,10 +98,6 @@ export default function VoiceAgent({
   const [isMuted, setIsMuted] = useState(false);
   const isCapturingRef = useRef(false);
   const [showControls, setShowControls] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(() => {
-    const saved = localStorage.getItem('voiceAgent_playbackSpeed');
-    return saved ? parseFloat(saved) : 1;
-  });
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('voiceAgent_volume');
     return saved ? parseFloat(saved) : 1;
@@ -124,16 +121,6 @@ export default function VoiceAgent({
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcript]);
-
-  useEffect(() => {
-    localStorage.setItem('voiceAgent_playbackSpeed', playbackSpeed.toString());
-    // Update active sources playback rate in real-time
-    activeSourcesRef.current.forEach(source => {
-      if (source.playbackRate) {
-        source.playbackRate.setTargetAtTime(playbackSpeed, playbackCtxRef.current?.currentTime || 0, 0.1);
-      }
-    });
-  }, [playbackSpeed]);
 
   useEffect(() => {
     localStorage.setItem('voiceAgent_volume', volume.toString());
@@ -194,7 +181,6 @@ export default function VoiceAgent({
   const playbackCtxRef = useRef<AudioContext | null>(null);
   const playbackGainNodeRef = useRef<GainNode | null>(null);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const compressorRef = useRef<DynamicsCompressorNode | null>(null);
 
   const getVoiceGender = (name: string) => {
     return 'female';
@@ -308,9 +294,9 @@ export default function VoiceAgent({
         # CORE CONVERSATIONAL BEHAVIORS (STRICT):
         1. VOICE & SPEECH NATURALNESS:
            - Use natural filler words appropriate to the language. In English: ("um", "uh", "well", "you know", "right"). In Hindi: ("ji", "ji haan", "bilkul", "samajh gayi", "zaroor", "haan ji", "ek minute") — NEVER use casual Hindi fillers like "accha", "badiya", "are", "matlab".
-           - Vary pacing: Slow down for important points, pause briefly (0.5s-1s) after asking a question, speed up slightly during lighter conversation.
+           - Vary pacing: Slow down for important points, pause briefly (0.5s-1s) after asking a question. Do NOT speed up or get bouncy — keep a steady adult conversational pace.
            - Mix short punchy sentences with longer ones. Never repeat the same sentence pattern back-to-back.
-           - Modulate tone: Warm/friendly for greetings, calm/reassuring for complaints, energetic for offers.
+           - Keep tone level and human: warm but restrained. Do NOT swing between dramatic moods, sing-song intonation, or performative energy shifts.
         
         2. ACTIVE LISTENING & ACKNOWLEDGEMENT:
            - Back-channel: Sprinkle small verbal nods ("Mm-hmm", "Right", "I see", "Got it", "Of course") mid-speech while the caller is talking.
@@ -399,8 +385,8 @@ export default function VoiceAgent({
         - Do NOT bounce intonation up and down. Speak like a poised radio newsreader on a slow story, not a children's show host.
 
         ${voiceProfile ? `
-        # VOICE PROFILE:
-        Mimic this profile exactly: TONE(${voiceProfile.tone}), PITCH(${voiceProfile.pitch}), PACE(${voiceProfile.pace}), INTONATION(${voiceProfile.intonation}), ENERGY(${voiceProfile.energyLevel}), NUANCES(${voiceProfile.nuances}).
+        # VOICE PROFILE (subtle guidance only — do NOT act theatrically):
+        Match this delivery style with a calm, natural adult female voice: TONE(${voiceProfile.tone}), PITCH(${voiceProfile.pitch}), PACE(${voiceProfile.pace}), INTONATION(${voiceProfile.intonation}), ENERGY(${voiceProfile.energyLevel}), NUANCES(${voiceProfile.nuances}). Keep pitch in a normal adult female range — never childlike, squeaky, or cartoonish.
         ` : ''}
         
         ${selectedPersona ? `
@@ -423,7 +409,8 @@ export default function VoiceAgent({
         systemInstruction,
         // Lower temperature → less variable delivery; helps the voice stay
         // grounded rather than swinging into expressive/cartoonish reads.
-        temperature: 0.4,
+        temperature: 0.3,
+        enableAffectiveDialog: false,
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
@@ -800,70 +787,19 @@ export default function VoiceAgent({
 
   const scheduleAudioChunk = (pcmData: Int16Array) => {
     if (!playbackCtxRef.current || playbackCtxRef.current.state === 'closed') {
-      playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
+      playbackCtxRef.current = new AudioContext({ sampleRate: GEMINI_LIVE_OUTPUT_SAMPLE_RATE });
       const setupCtx = playbackCtxRef.current;
       const t = setupCtx.currentTime;
 
-      // 1. HPF — remove sub-bass rumble
-      const hpf = setupCtx.createBiquadFilter();
-      hpf.type = 'highpass';
-      hpf.frequency.setValueAtTime(85, t);
-
-      // 2. Body warmth — chest resonance
-      const warmth = setupCtx.createBiquadFilter();
-      warmth.type = 'peaking';
-      warmth.frequency.setValueAtTime(320, t);
-      warmth.Q.setValueAtTime(0.9, t);
-      warmth.gain.setValueAtTime(2.0, t);
-
-      // 3. Sweetness / presence — Indian singer melodic quality (2–3 kHz)
-      const sweetness = setupCtx.createBiquadFilter();
-      sweetness.type = 'peaking';
-      sweetness.frequency.setValueAtTime(2200, t);
-      sweetness.Q.setValueAtTime(1.2, t);
-      sweetness.gain.setValueAtTime(2.5, t);
-
-      // 4. Harshness cut — soften the digital edge at 5 kHz
-      const deharsh = setupCtx.createBiquadFilter();
-      deharsh.type = 'peaking';
-      deharsh.frequency.setValueAtTime(5000, t);
-      deharsh.Q.setValueAtTime(0.8, t);
-      deharsh.gain.setValueAtTime(-2.0, t);
-
-      // 5. Air / sparkle — top-end shimmer
-      const air = setupCtx.createBiquadFilter();
-      air.type = 'highshelf';
-      air.frequency.setValueAtTime(9000, t);
-      air.gain.setValueAtTime(2.0, t);
-
-      // 6. Gentle transparent compressor
-      compressorRef.current = setupCtx.createDynamicsCompressor();
-      compressorRef.current.threshold.setValueAtTime(-18, t);
-      compressorRef.current.knee.setValueAtTime(20, t);
-      compressorRef.current.ratio.setValueAtTime(2.0, t);
-      compressorRef.current.attack.setValueAtTime(0.025, t);
-      compressorRef.current.release.setValueAtTime(0.3, t);
-
-      // 7. Master volume — single gain stage (no per-chunk gain duplication)
+      // Clean playback — no EQ/compression. Heavy processing was making speech sound synthetic/cartoonish.
       playbackGainNodeRef.current = setupCtx.createGain();
       playbackGainNodeRef.current.gain.setValueAtTime(volume, t);
-
-      // Chain: hpf → warmth → sweetness → deharsh → air → compressor → master → out
-      // No delay/reverb — keeps speech consonants crisp and intelligible
-      hpf.connect(warmth);
-      warmth.connect(sweetness);
-      sweetness.connect(deharsh);
-      deharsh.connect(air);
-      air.connect(compressorRef.current);
-      compressorRef.current.connect(playbackGainNodeRef.current);
       playbackGainNodeRef.current.connect(setupCtx.destination);
-
-      (playbackCtxRef.current as any)._entryNode = hpf;
       nextPlaybackTimeRef.current = setupCtx.currentTime + 0.02;
     }
 
     const ctx = playbackCtxRef.current;
-    const buffer = ctx.createBuffer(1, pcmData.length, 24000);
+    const buffer = ctx.createBuffer(1, pcmData.length, GEMINI_LIVE_OUTPUT_SAMPLE_RATE);
     const channelData = buffer.getChannelData(0);
     for (let i = 0; i < pcmData.length; i++) {
       channelData[i] = pcmData[i]! / 32768;
@@ -871,20 +807,17 @@ export default function VoiceAgent({
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.playbackRate.value = playbackSpeed;
 
     let startTime = nextPlaybackTimeRef.current;
     if (startTime < ctx.currentTime) {
       startTime = ctx.currentTime + 0.03;
     }
 
-    // Connect source directly to EQ chain — no intermediate gain node
-    const entryNode = (ctx as any)._entryNode as AudioNode;
-    source.connect(entryNode ?? ctx.destination);
+    source.connect(playbackGainNodeRef.current ?? ctx.destination);
     source.start(startTime);
     activeSourcesRef.current.add(source);
 
-    const duration = pcmData.length / 24000 / playbackSpeed;
+    const duration = pcmData.length / GEMINI_LIVE_OUTPUT_SAMPLE_RATE;
     nextPlaybackTimeRef.current = startTime + duration;
 
     source.onended = () => {
@@ -985,21 +918,7 @@ export default function VoiceAgent({
                       <span className="text-[10px] font-bold text-slate-400 w-6 text-right shrink-0">{micGain.toFixed(1)}x</span>
                     </div>
 
-                    <div className="flex items-center justify-between w-full space-x-2 pt-1 border-t border-slate-100">
-                      <div className="flex bg-slate-100/50 rounded-full p-1">
-                        {[0.75, 1, 1.25, 1.5].map((speed) => (
-                          <button
-                            key={speed}
-                            onClick={() => setPlaybackSpeed(speed)}
-                            className={cn(
-                              "px-2.5 py-1 rounded-full text-[10px] font-bold transition-all",
-                              playbackSpeed === speed ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-200/50"
-                            )}
-                          >
-                            {speed}x
-                          </button>
-                        ))}
-                      </div>
+                    <div className="flex items-center justify-end w-full space-x-2 pt-1 border-t border-slate-100">
                       <div className="flex space-x-2">
                         <button
                           onClick={() => setNoiseSuppression(!noiseSuppression)}
