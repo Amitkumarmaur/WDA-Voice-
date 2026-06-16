@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
           { inlineData: { mimeType, data } },
           {
             text: `Analyze this voice sample and describe its characteristics in extreme detail.
-            Return JSON with keys: name, description, tone, pace, pitch, intonation, nuances, energyLevel, recommendedVoice (exactly one of: Kore, Zephyr, Aoede — Gemini Live prebuilt voices matching this app's voice picker).`,
+            Return JSON with keys: name, description, tone, pace, pitch, intonation, nuances, energyLevel, recommendedVoice (exactly one of: Aoede, Leda, Kore — the Gemini Live prebuilt voices surfaced in this app's voice picker; choose Aoede for warm/conversational, Leda for lively/youthful, Kore for professional/steady).`,
           },
         ],
         config: {
@@ -129,8 +129,8 @@ Deno.serve(async (req) => {
               recommendedVoice: {
                 type: Type.STRING,
                 format: 'enum',
-                enum: ['Kore', 'Zephyr', 'Aoede'],
-                description: 'Closest Gemini Live prebuilt voice for this sample.',
+                enum: ['Aoede', 'Leda', 'Kore'],
+                description: 'Closest Gemini Live prebuilt voice for this sample (must match the app voice picker).',
               },
             },
             required: [

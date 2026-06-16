@@ -161,8 +161,8 @@ export default function VoiceAgent({
 
   const [status, setStatus] = useState<string>('Ready to start');
   const [voiceName, setVoiceName] = useState(() => {
-    // Persona default if set, otherwise Leda
-    return 'voice_leda';
+    // Default to Aoede — most natural / human-sounding for support flows.
+    return 'voice_aoede';
   });
   const voiceManuallySetRef = useRef(false);
 
@@ -1037,20 +1037,28 @@ export default function VoiceAgent({
             {BEAUTIFUL_VOICES.map((v) => (
               <button
                 key={v.id}
+                type="button"
                 disabled={isConnected}
                 onClick={() => {
                   voiceManuallySetRef.current = true;
                   setVoiceName(v.id);
                 }}
+                title={v.description}
                 className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-semibold transition-all border",
+                  "flex flex-col items-start gap-0.5 px-3 py-2 rounded-2xl text-left transition-all border",
                   voiceName === v.id
                     ? "bg-violet-600 text-white border-violet-700 shadow-sm"
-                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50",
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50",
                   isConnected && "opacity-40 cursor-not-allowed"
                 )}
               >
-                {v.label}
+                <span className="text-xs font-semibold leading-none">{v.label}</span>
+                <span className={cn(
+                  "text-[10px] leading-tight",
+                  voiceName === v.id ? "text-violet-100" : "text-slate-400"
+                )}>
+                  {v.description}
+                </span>
               </button>
             ))}
           </div>
