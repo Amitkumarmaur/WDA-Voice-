@@ -2,6 +2,10 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
 const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+const projectRef = url?.match(/https:\/\/([^.]+)\.supabase\.co/i)?.[1];
+
+/** Per-project storage key — avoids PKCE verifier clashes when Supabase project env changes. */
+const authStorageKey = projectRef ? `sb-${projectRef}-auth-token` : undefined;
 
 /** Browser-safe check: real keys present (not empty and not .env.example placeholders). */
 export function isSupabaseEnvConfigured(): boolean {
@@ -21,8 +25,9 @@ export function getSupabase(): SupabaseClient {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: 'pkce',
+        ...(authStorageKey ? { storageKey: authStorageKey } : {}),
       },
     });
   }

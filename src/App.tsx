@@ -121,6 +121,44 @@ export default function App() {
     setLanguage(settings?.language === 'hindi' || settings?.language === 'english' ? settings.language : 'english');
   }, []);
 
+  /** Complete Google OAuth when Supabase redirects back with ?code= */
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+
+    let cancelled = false;
+    const supabase = getSupabase();
+
+    void supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+      if (cancelled) return;
+      window.history.replaceState({}, '', '/app');
+      if (error) {
+        console.error('exchangeCodeForSession', error);
+        const msg = (error.message || '').toLowerCase();
+        setOauthError(
+          msg.includes('verifier') || msg.includes('pkce') || msg.includes('invalid grant')
+            ? 'Sign-in link expired or was opened in the wrong browser. Return to the app and click Business Login again.'
+            : `Sign-in failed: ${error.message}`
+        );
+        return;
+      }
+      if (data.session?.user) {
+        setOauthError(null);
+        setUser(data.session.user);
+        setIsLoading(false);
+        window.setTimeout(() => {
+          void loadWorkspace(data.session!.user.id);
+        }, 0);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadWorkspace, supabaseConfigured]);
+
   useEffect(() => {
     if (!supabaseConfigured) {
       setIsLoading(false);
@@ -132,6 +170,12 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       setIsLoading(false);
+      if (event === 'SIGNED_IN' && session?.user) {
+        setOauthError(null);
+        if (window.location.search.includes('code=')) {
+          window.history.replaceState({}, '', '/app');
+        }
+      }
       // Defer async Supabase calls — calling RPC/REST inside this callback synchronously
       // can block PKCE session exchange so users never appear in auth.users.
       if (session?.user) {
@@ -155,26 +199,6 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, [loadWorkspace, resetAgentSession, supabaseConfigured]);
-
-  /** If OAuth returns with ?code= but session never establishes, show redirect URL guidance. */
-  useEffect(() => {
-    if (!supabaseConfigured) return;
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has('code')) return;
-
-    const t = window.setTimeout(() => {
-      void getSupabase()
-        .auth.getSession()
-        .then(({ data: { session } }) => {
-          if (session?.user) return;
-          setOauthError(
-            `Google sign-in did not finish. In Supabase → Authentication → URL Configuration, set Site URL to ${window.location.origin} and add ${window.location.origin}/app under Redirect URLs, then try again.`
-          );
-          window.history.replaceState({}, '', '/app');
-        });
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [supabaseConfigured]);
 
   useEffect(() => {
     if (user?.id) setActiveMainTab('workspace');
