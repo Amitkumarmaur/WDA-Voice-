@@ -129,12 +129,16 @@ export default function App() {
     const supabase = getSupabase();
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       setIsLoading(false);
+      // Defer async Supabase calls — calling RPC/REST inside this callback synchronously
+      // can block PKCE session exchange so users never appear in auth.users.
       if (session?.user) {
-        void loadWorkspace(session.user.id);
-      } else {
+        window.setTimeout(() => {
+          void loadWorkspace(session.user!.id);
+        }, 0);
+      } else if (event === 'SIGNED_OUT') {
         resetAgentSession();
       }
     });
@@ -142,11 +146,35 @@ export default function App() {
     void supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setIsLoading(false);
-      if (session?.user) void loadWorkspace(session.user.id);
+      if (session?.user) {
+        window.setTimeout(() => {
+          void loadWorkspace(session.user!.id);
+        }, 0);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, [loadWorkspace, resetAgentSession, supabaseConfigured]);
+
+  /** If OAuth returns with ?code= but session never establishes, show redirect URL guidance. */
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('code')) return;
+
+    const t = window.setTimeout(() => {
+      void getSupabase()
+        .auth.getSession()
+        .then(({ data: { session } }) => {
+          if (session?.user) return;
+          setOauthError(
+            `Google sign-in did not finish. In Supabase → Authentication → URL Configuration, set Site URL to ${window.location.origin} and add ${window.location.origin}/app under Redirect URLs, then try again.`
+          );
+          window.history.replaceState({}, '', '/app');
+        });
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [supabaseConfigured]);
 
   useEffect(() => {
     if (user?.id) setActiveMainTab('workspace');
@@ -208,7 +236,10 @@ export default function App() {
     const supabase = getSupabase();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/app` },
+      options: {
+        redirectTo: `${window.location.origin}/app`,
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) {
       const m = (error.message || '').toLowerCase();
@@ -420,7 +451,7 @@ export default function App() {
             </div>
           ) : activeMainTab === 'admin' ? (
             user && isPlatformAdmin ? (
-              <AdminDashboard />
+              <AdminDashboard currentUserId={user.id} />
             ) : (
               <p className="type-body text-ink-muted max-w-5xl mx-auto">Admin access only.</p>
             )

@@ -15,7 +15,7 @@ function loadEnvFile(filePath) {
   const out = {};
   if (!fs.existsSync(filePath)) return out;
   const text = fs.readFileSync(filePath, 'utf8');
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (!m) continue;
     let v = m[2].trim();
@@ -53,7 +53,10 @@ async function main() {
   }
   ok('VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set (non-placeholder)');
 
-  console.log('\nManual (Dashboard): Authentication → Providers → Google enabled; Redirect URLs include your app origin.\n');
+  console.log('\nSupabase Dashboard → Authentication (required for Google sign-in):');
+  console.log('  Site URL: http://localhost:2000');
+  console.log('  Redirect URLs: http://localhost:2000/app , http://localhost:2000/**');
+  console.log('  Providers → Google: enabled with OAuth Client ID + Secret\n');
 
   const refMatch = url.match(/https:\/\/([^.]+)\.supabase\.co/i);
   const projectRef = refMatch ? refMatch[1] : '(derive from URL)';
@@ -63,10 +66,12 @@ async function main() {
 
   const restHeaders = {
     apikey: anon,
-    Authorization: `Bearer ${anon}`,
     'Content-Type': 'application/json',
     Prefer: 'return=representation',
   };
+  if (anon.startsWith('eyJ')) {
+    restHeaders.Authorization = `Bearer ${anon}`;
+  }
   try {
     const r = await fetch(`${url}/rest/v1/rpc/resolve_org_by_public_slug`, {
       method: 'POST',
@@ -86,8 +91,10 @@ async function main() {
   const fnHeaders = {
     'Content-Type': 'application/json',
     apikey: anon,
-    Authorization: `Bearer ${anon}`,
   };
+  if (anon.startsWith('eyJ')) {
+    fnHeaders.Authorization = `Bearer ${anon}`;
+  }
 
   try {
     const r = await fetch(`${url}/functions/v1/gemini-live-token`, {
