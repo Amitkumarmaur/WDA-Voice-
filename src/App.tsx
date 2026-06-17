@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { getSupabase, isSupabaseEnvConfigured } from './lib/supabase';
+import { getSupabase, getSupabaseEnvMismatch, isSupabaseEnvConfigured } from './lib/supabase';
 import { TenantProvider, type TenantRef } from './lib/tenantContext';
 import VoiceAgent from './components/VoiceAgent';
 import BusinessDashboardShell from './components/dashboard/BusinessDashboardShell';
@@ -31,6 +31,7 @@ type OrgRow = {
 };
 
 const supabaseConfigured = isSupabaseEnvConfigured();
+const supabaseEnvMismatch = getSupabaseEnvMismatch();
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -397,6 +398,14 @@ export default function App() {
             </div>
           </div>
         </nav>
+
+        {supabaseEnvMismatch && (
+          <div className="border-b border-hairline bg-surface-2 px-4 py-3 sm:px-6">
+            <div className="max-w-7xl mx-auto type-body-sm text-semantic-error" role="alert">
+              <strong className="font-medium">Supabase env mismatch.</strong> {supabaseEnvMismatch}
+            </div>
+          </div>
+        )}
 
         {!supabaseConfigured && (
           <div className="border-b border-hairline bg-surface-2 px-4 py-3 sm:px-6">
