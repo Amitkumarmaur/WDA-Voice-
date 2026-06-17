@@ -48,7 +48,7 @@ export function CustomersPage() {
             >
               <div className="mb-3 flex gap-0.5" aria-hidden>
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className="h-3.5 w-3.5 fill-ink/10 text-ink" />
+                  <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                 ))}
               </div>
               <p className="type-body-lg text-pretty text-ink">{s.quote}</p>

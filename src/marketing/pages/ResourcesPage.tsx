@@ -8,6 +8,8 @@ const items = [
   { title: 'Map leads from voice to your CRM', k: 'Post', t: '6 min' },
 ] as const;
 
+const COMING_SOON = true;
+
 export function ResourcesPage() {
   return (
     <div className="px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
@@ -23,6 +25,18 @@ export function ResourcesPage() {
           <ButtonSecondaryLink to="/contact">Ask a question</ButtonSecondaryLink>
         </div>
 
+        {COMING_SOON ? (
+          <div className="mt-12 rounded-lg border border-hairline bg-surface-1 p-6 sm:p-8">
+            <p className="type-body font-medium text-ink">Guides coming soon</p>
+            <p className="type-body text-ink-muted mt-1 text-pretty">
+              We're writing practical how-tos for knowledge setup, embed, and lead routing. Drop us a line and we'll
+              send them as they publish.
+            </p>
+            <ButtonSecondaryLink to="/contact" className="mt-4 !inline-flex min-h-10 !px-4 !py-2">
+              Get notified
+            </ButtonSecondaryLink>
+          </div>
+        ) : (
         <ul className="mt-12 space-y-2">
           {items.map((it) => (
             <li key={it.title}>
@@ -49,6 +63,7 @@ export function ResourcesPage() {
             </li>
           ))}
         </ul>
+        )}
 
         <div className="mt-12 flex items-start gap-2 rounded-lg border border-hairline bg-surface-1 p-5 type-body sm:p-6">
           <BookOpen className="mt-0.5 h-5 w-5 text-ink" />

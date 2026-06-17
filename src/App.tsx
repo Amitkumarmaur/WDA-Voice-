@@ -47,6 +47,7 @@ export default function App() {
   const [intro, setIntro] = useState<string>('');
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   /** Skip one persist cycle after hydrating agent settings from the org (avoids leaking prior session state). */
   const skipNextPersistRef = useRef(true);
 
@@ -202,7 +203,14 @@ export default function App() {
   }, [loadWorkspace, resetAgentSession, supabaseConfigured]);
 
   useEffect(() => {
-    if (user?.id) setActiveMainTab('workspace');
+    if (user?.id) {
+      setActiveMainTab('workspace');
+      const key = `voicera_welcomed_${user.id}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        setShowWelcomeBanner(true);
+      }
+    }
   }, [user?.id]);
 
   useEffect(() => {
@@ -353,6 +361,18 @@ export default function App() {
                       </button>
                     )}
                   </div>
+                  {orgRow && orgRow.subscription_status !== 'active' && (
+                    <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-2 px-3 py-1 type-caption text-ink-muted">
+                      Free · 120 min
+                      <button
+                        type="button"
+                        onClick={() => setActiveMainTab('workspace')}
+                        className="text-indigo-600 font-medium hover:text-indigo-700 underline underline-offset-2"
+                      >
+                        Upgrade
+                      </button>
+                    </span>
+                  )}
                   <div className="hidden h-8 w-px bg-hairline sm:block" />
                   <div className="flex items-center space-x-2 sm:space-x-3">
                     <img
@@ -379,15 +399,16 @@ export default function App() {
                   <span className="hidden sm:inline">Login needs Supabase env</span>
                 </span>
               ) : (
-                <div className="flex flex-col items-end gap-2 max-w-sm">
+                <div className="flex flex-col items-end gap-1.5 max-w-sm">
                   <button
                     type="button"
                     onClick={() => void handleLogin()}
                     className="type-body-sm font-medium flex min-h-10 items-center space-x-2 border border-hairline bg-surface-1 rounded-md px-4 py-2.5 text-ink hover:border-ink/20"
                   >
                     <LogIn size={18} />
-                    <span>Business Login</span>
+                    <span>Continue with Google</span>
                   </button>
+                  <p className="type-caption text-ink-tertiary text-right">New? Your workspace is created on first sign-in.</p>
                   {oauthError && (
                     <p className="type-caption text-semantic-error text-right leading-snug" role="alert">
                       {oauthError}
@@ -421,6 +442,23 @@ export default function App() {
           <div className="border-b border-hairline bg-surface-2 px-4 py-3 sm:px-6">
             <div className="max-w-7xl mx-auto type-body-sm text-semantic-error" role="alert">
               <strong className="font-medium">Workspace setup failed.</strong> {workspaceError}
+            </div>
+          </div>
+        )}
+
+        {showWelcomeBanner && (
+          <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-3 sm:px-6">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+              <p className="type-body-sm text-indigo-800">
+                <strong className="font-semibold">Welcome!</strong> You have <strong>120 free voice minutes</strong> — no credit card needed. Set up your agent to get started.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowWelcomeBanner(false)}
+                className="shrink-0 type-caption text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         )}

@@ -20,14 +20,16 @@ export function ContactPage() {
         </p>
 
         {!configured ? (
-          <p className="type-body-sm mt-6 rounded-md border border-hairline bg-surface-2/80 px-4 py-3 text-ink-muted">
-            Contact submissions need Supabase in this environment. Add{' '}
-            <code className="type-mono rounded bg-surface-1 px-1 py-0.5 text-ink">VITE_SUPABASE_URL</code> and{' '}
-            <code className="type-mono rounded bg-surface-1 px-1 py-0.5 text-ink">VITE_SUPABASE_ANON_KEY</code> to{' '}
-            <code className="type-mono rounded bg-surface-1 px-1 py-0.5 text-ink">.env.local</code>, deploy the{' '}
-            <code className="type-mono rounded bg-surface-1 px-1 py-0.5 text-ink">contact-form</code> Edge Function, and run
-            migrations.
-          </p>
+          <div className="mt-6 rounded-md border border-hairline bg-surface-2/80 px-4 py-4 text-ink-muted space-y-1">
+            <p className="type-body-sm font-medium text-ink">Contact form temporarily unavailable</p>
+            <p className="type-body-sm">
+              Email us directly at{' '}
+              <a href="mailto:hello@voicera.ai" className="text-ink underline underline-offset-2 hover:opacity-80">
+                hello@voicera.ai
+              </a>{' '}
+              and we'll respond within one business day.
+            </p>
+          </div>
         ) : null}
 
         {phase === 'success' ? (

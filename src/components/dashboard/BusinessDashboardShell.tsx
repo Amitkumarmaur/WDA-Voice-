@@ -11,6 +11,8 @@ import LeadsPanel from './LeadsPanel';
 import AppointmentsPanel from './AppointmentsPanel';
 import TranscriptsPanel from './TranscriptsPanel';
 import BillingCard from './BillingCard';
+import PhoneAgentPanel from './PhoneAgentPanel';
+import EmbedCodePanel from './EmbedCodePanel';
 import DashboardOverview, { type DashboardSectionNav } from './DashboardOverview';
 
 export type OrgRowLite = {
@@ -42,6 +44,8 @@ const NAV: { id: Section; label: string }[] = [
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'activity', label: 'Activity' },
   { id: 'voice', label: 'Voice & settings' },
+  { id: 'embed', label: 'Embed widget' },
+  { id: 'phone', label: 'Phone' },
 ];
 
 export default function BusinessDashboardShell({
@@ -131,6 +135,14 @@ export default function BusinessDashboardShell({
           />
           <VoiceCloner organizationId={organizationId} onUpdate={onVoiceProfileUpdate} />
         </div>
+      )}
+
+      {section === 'embed' && (
+        <EmbedCodePanel publicSlug={orgRow.public_slug} />
+      )}
+
+      {section === 'phone' && (
+        <PhoneAgentPanel organizationId={organizationId} publicSlug={orgRow.public_slug} />
       )}
     </div>
   );

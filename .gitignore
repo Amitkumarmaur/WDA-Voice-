@@ -8,3 +8,4 @@ coverage/
 !.env.example
 .tmp_*.json
 supabase/.temp/
+.vercel

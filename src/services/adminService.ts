@@ -57,6 +57,49 @@ export type AdminOverview = {
   total_appointments: number;
 };
 
+export type AdminPlatformStats = {
+  total_transcripts: number;
+  total_knowledge_items: number;
+  total_voice_minutes_used: number;
+  active_subscriptions: number;
+  paid_this_month_orgs: number;
+  total_org_members: number;
+};
+
+export type AdminLead = {
+  id: string;
+  organization_id: string;
+  org_name: string | null;
+  public_slug: string | null;
+  name: string;
+  email: string;
+  phone?: string | null;
+  interest?: string | null;
+  source?: string | null;
+  created_at: string;
+};
+
+export type AdminTranscript = {
+  id: string;
+  organization_id: string;
+  org_name: string | null;
+  public_slug: string | null;
+  created_at: string;
+  duration_seconds?: number | null;
+  message_count: number;
+  messages: { role: string; text: string }[];
+};
+
+export type AdminPlan = {
+  id: string;
+  display_name: string;
+  stripe_price_id: string | null;
+  monthly_voice_minutes_limit: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+
 export type AdminContactSubmission = {
   id: string;
   created_at: string;
@@ -168,6 +211,9 @@ export const AdminService = {
       planName?: PlanName | null;
       voiceLimit?: number | null;
       resetUsage?: boolean;
+      orgName?: string | null;
+      publicSlug?: string | null;
+      twilioPhone?: string | null;
     }
   ): Promise<void> {
     const supabase = getSupabase();
@@ -177,6 +223,9 @@ export const AdminService = {
       p_plan_name: opts.planName ?? null,
       p_voice_limit: opts.voiceLimit ?? null,
       p_reset_usage: opts.resetUsage ?? false,
+      p_org_name: opts.orgName ?? null,
+      p_public_slug: opts.publicSlug ?? null,
+      p_twilio_phone: opts.twilioPhone ?? null,
     });
     if (error) throw new Error(rpcErrorMessage(error));
   },
@@ -184,6 +233,63 @@ export const AdminService = {
   async deleteOrganization(orgId: string): Promise<void> {
     const supabase = getSupabase();
     const { error } = await supabase.rpc('admin_delete_organization', { p_org_id: orgId });
+    if (error) throw new Error(rpcErrorMessage(error));
+  },
+
+  async getPlatformStats(): Promise<AdminPlatformStats> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_get_platform_stats');
+    if (error) throw new Error(rpcErrorMessage(error));
+    const s = (data ?? {}) as Partial<AdminPlatformStats>;
+    return {
+      total_transcripts: s.total_transcripts ?? 0,
+      total_knowledge_items: s.total_knowledge_items ?? 0,
+      total_voice_minutes_used: Number(s.total_voice_minutes_used ?? 0),
+      active_subscriptions: s.active_subscriptions ?? 0,
+      paid_this_month_orgs: s.paid_this_month_orgs ?? 0,
+      total_org_members: s.total_org_members ?? 0,
+    };
+  },
+
+  async getAllLeads(limit = 200): Promise<AdminLead[]> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_get_all_leads', { p_limit: limit });
+    if (error) throw new Error(rpcErrorMessage(error));
+    return Array.isArray(data) ? (data as AdminLead[]) : [];
+  },
+
+  async getAllTranscripts(limit = 100): Promise<AdminTranscript[]> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_get_all_transcripts', { p_limit: limit });
+    if (error) throw new Error(rpcErrorMessage(error));
+    return Array.isArray(data) ? (data as AdminTranscript[]) : [];
+  },
+
+  async deleteContactSubmission(id: string): Promise<void> {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('admin_delete_contact_submission', { p_id: id });
+    if (error) throw new Error(rpcErrorMessage(error));
+  },
+
+  async getPlans(): Promise<AdminPlan[]> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('admin_get_plans');
+    if (error) throw new Error(rpcErrorMessage(error));
+    return Array.isArray(data) ? (data as AdminPlan[]) : [];
+  },
+
+  async updatePlan(
+    planId: string,
+    opts: { stripePriceId?: string; voiceLimit?: number; displayName?: string; isActive?: boolean }
+  ): Promise<void> {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('admin_update_plan', {
+      p_plan_id: planId,
+      p_stripe_price_id: opts.stripePriceId ?? null,
+      p_monthly_voice_minutes_limit: opts.voiceLimit ?? null,
+      p_display_name: opts.displayName ?? null,
+      p_is_active: opts.isActive ?? null,
+    });
     if (error) throw new Error(rpcErrorMessage(error));
   },
 };

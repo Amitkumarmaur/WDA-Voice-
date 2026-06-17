@@ -4,6 +4,8 @@ import { getSupabase } from '../../lib/supabase';
 import {
   BookOpen,
   Calendar,
+  CheckCircle2,
+  Circle,
   ExternalLink,
   LayoutDashboard,
   MessageSquare,
@@ -12,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export type DashboardSectionNav = 'overview' | 'knowledge' | 'activity' | 'voice';
+export type DashboardSectionNav = 'overview' | 'knowledge' | 'activity' | 'voice' | 'embed' | 'phone';
 
 type Props = {
   organizationId: string;
@@ -106,6 +108,36 @@ export default function DashboardOverview({ organizationId, orgRow, user, intro,
         </div>
       </div>
 
+      {counts && counts.knowledge === 0 && counts.transcripts === 0 && (
+        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6 space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-indigo-500">Getting started</p>
+            <h4 className="text-lg font-display font-bold text-slate-900 mt-1">Set up your voice agent in 3 steps</h4>
+          </div>
+          <ul className="space-y-3">
+            {[
+              { label: 'Write your agent intro', sublabel: 'Tell the AI how to greet callers and what it helps with', section: 'voice' as const },
+              { label: 'Add a knowledge document', sublabel: 'Upload a FAQ, pricing sheet, or product doc', section: 'knowledge' as const },
+              { label: 'Copy your embed code', sublabel: 'Paste on your website — no server needed', section: 'embed' as const },
+            ].map((step, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(step.section)}
+                  className="w-full text-left flex items-start gap-3 group"
+                >
+                  <Circle className="mt-0.5 h-5 w-5 shrink-0 text-indigo-300 group-hover:text-indigo-500 transition-colors" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 transition-colors">{step.label} →</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{step.sublabel}</p>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ key, label, icon: Icon, section }) => {
           const n = counts?.[key] ?? '—';
@@ -147,10 +179,9 @@ export default function DashboardOverview({ organizationId, orgRow, user, intro,
         </div>
 
         <div className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm space-y-3">
-          <h4 className="text-lg font-display font-bold text-slate-900">Public embed</h4>
+          <h4 className="text-lg font-display font-bold text-slate-900">Embed widget</h4>
           <p className="text-sm text-slate-500">
-            Share this link so visitors can talk to your agent without signing in (uses your published knowledge and
-            settings).
+            Add your AI voice agent to any website — as a floating button or inline iframe. No server needed.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <code className="text-xs bg-slate-100 px-3 py-2 rounded-lg break-all text-slate-800 flex-1">{embedUrl}</code>
@@ -161,9 +192,16 @@ export default function DashboardOverview({ organizationId, orgRow, user, intro,
               className="inline-flex items-center justify-center gap-1.5 shrink-0 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
             >
               <ExternalLink size={16} />
-              Open
+              Preview
             </a>
           </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('embed')}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            Get embed code →
+          </button>
         </div>
       </div>
     </div>

@@ -4,13 +4,11 @@ import { cn } from '../../lib/utils';
 import { ButtonFinLink, ButtonPrimaryLink, ButtonSecondaryLink } from '../components/Buttons';
 import { MockupVoiceAgent, MockupDashboardInline } from '../components/MockupVoiceAgent';
 
-const trustLogos = [
-  { name: 'Summit', note: 'Defence & training' },
-  { name: 'Lumen Clinics', note: 'Patient calls' },
-  { name: 'Harbor Ed', note: 'Admissions' },
-  { name: 'Nimbus SaaS', note: 'B2B support' },
-  { name: 'Cedar Legal', note: 'Intake' },
-  { name: 'Apex Retail', note: 'Store inquiries' },
+const earlyAdopterPerks = [
+  { label: '60 days free', note: 'No card required' },
+  { label: 'Priority setup', note: 'We configure with you' },
+  { label: 'Locked-in pricing', note: 'Rate never changes' },
+  { label: 'Direct Slack access', note: 'Founders respond' },
 ];
 
 const stats = [
@@ -115,21 +113,27 @@ export function HomePage() {
 
       <section className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-[1280px] text-center">
-          <p className="type-eyebrow text-ink">Social proof</p>
-          <h2 className="type-display-md text-ink mt-1 text-balance">Built for teams where the phone still closes deals</h2>
+          <p className="type-eyebrow text-ink">Early access</p>
+          <h2 className="type-display-md text-ink mt-1 text-balance">Be one of our first 20 clients</h2>
           <p className="type-body text-ink-muted mx-auto mt-2 max-w-2xl text-pretty">
-            From coaching institutes to clinics and B2B support—when callers need trust, not a chatbot wall.
+            We're onboarding founding clients now. You get hands-on setup, locked-in pricing, and direct access to the
+            team — in exchange for honest feedback.
           </p>
           <div className="mt-8 flex flex-wrap items-stretch justify-center gap-2 sm:gap-3">
-            {trustLogos.map((l) => (
+            {earlyAdopterPerks.map((l) => (
               <div
-                key={l.name}
+                key={l.label}
                 className="card-interactive flex min-w-[140px] flex-col items-center rounded-lg px-4 py-3 text-center sm:min-w-[160px]"
               >
-                <span className="type-body-sm font-medium text-ink">{l.name}</span>
+                <span className="type-body-sm font-medium text-ink">{l.label}</span>
                 <span className="type-caption text-ink-tertiary mt-0.5">{l.note}</span>
               </div>
             ))}
+          </div>
+          <div className="mt-6">
+            <ButtonPrimaryLink to="/contact" className="!min-h-11 inline-flex">
+              Apply for early access
+            </ButtonPrimaryLink>
           </div>
         </div>
       </section>

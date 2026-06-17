@@ -73,15 +73,21 @@ const prebuiltLower = new Map<string, GeminiLivePrebuiltVoice>(
  */
 export const GEMINI_LIVE_UI_VOICES = [
   {
+    id: 'voice_aoede',
+    label: 'Aoede',
+    description: 'Natural & breezy — most human-sounding',
+    engine: 'Aoede' as const,
+  },
+  {
     id: 'voice_despina',
     label: 'Despina',
-    description: 'Smooth & level — poised broadcast-style',
+    description: 'Smooth & composed — poised professional',
     engine: 'Despina' as const,
   },
   {
     id: 'voice_erinome',
     label: 'Erinome',
-    description: 'Clear & articulate — newscaster precision',
+    description: 'Clear & articulate — broadcast precision',
     engine: 'Erinome' as const,
   },
   {
