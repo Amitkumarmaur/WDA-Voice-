@@ -45,6 +45,7 @@ export default function App() {
   const [language, setLanguage] = useState<'hindi' | 'english'>('english');
   const [intro, setIntro] = useState<string>('');
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   /** Skip one persist cycle after hydrating agent settings from the org (avoids leaking prior session state). */
   const skipNextPersistRef = useRef(true);
 
@@ -54,6 +55,7 @@ export default function App() {
     setKnowledgeItems([]);
     setActiveVoiceProfile(null);
     setIsPlatformAdmin(false);
+    setWorkspaceError(null);
     setIntro('');
     setActivePersona(VOICE_PERSONAS[0] ?? null);
     setLanguage('english');
@@ -67,47 +69,42 @@ export default function App() {
 
   const loadWorkspace = useCallback(async (uid: string) => {
     skipNextPersistRef.current = true;
+    setWorkspaceError(null);
     setIntro('');
     setActivePersona(VOICE_PERSONAS[0] ?? null);
     setLanguage('english');
     setKnowledgeItems([]);
     setActiveVoiceProfile(null);
+    setOrganizationId(null);
+    setOrgRow(null);
 
     const supabase = getSupabase();
-    const { data: mem } = await supabase
-      .from('organization_members')
-      .select(
-        `
-        organization_id,
-        organizations ( id, name, public_slug, subscription_status )
-      `
-      )
-      .eq('user_id', uid)
-      .limit(1)
-      .maybeSingle();
 
-    let oid = mem?.organization_id as string | undefined;
-    if (!oid) {
-      const { data: ensured, error: ensureErr } = await supabase.rpc('ensure_my_organization');
-      if (ensureErr || !ensured) {
-        console.error('ensure_my_organization', ensureErr);
-        return;
-      }
-      oid = ensured as string;
+    // Always ensure a workspace exists for this user (idempotent — creates org on first sign-in).
+    const { data: ensured, error: ensureErr } = await supabase.rpc('ensure_my_organization');
+    if (ensureErr || !ensured) {
+      console.error('ensure_my_organization', ensureErr);
+      setWorkspaceError(
+        ensureErr?.message ||
+          'Could not create your workspace. Sign out, sign in again, and confirm Google auth is enabled in Supabase.'
+      );
+      return;
     }
-
+    const oid = ensured as string;
     setOrganizationId(oid);
 
-    const nested = mem?.organizations as OrgRow | OrgRow[] | null | undefined;
-    const orgFromMem = Array.isArray(nested) ? nested[0] : nested;
-    if (orgFromMem) setOrgRow(orgFromMem);
-
-    const [{ data: orgData }, items, settings, profile] = await Promise.all([
+    const [{ data: orgData, error: orgErr }, items, settings, profile] = await Promise.all([
       supabase.from('organizations').select('id, name, public_slug, subscription_status').eq('id', oid).single(),
       KnowledgeBaseService.getKnowledgeItems(oid),
       AgentSettingsService.get(oid),
       VoiceService.getActiveVoiceProfile(oid),
     ]);
+
+    if (orgErr) {
+      console.error('organizations', orgErr);
+      setWorkspaceError(orgErr.message || 'Could not load your workspace.');
+      return;
+    }
 
     const profRes = await supabase.from('profiles').select('is_platform_admin').eq('id', uid).maybeSingle();
     setIsPlatformAdmin(!profRes.error && !!profRes.data?.is_platform_admin);
@@ -352,6 +349,14 @@ export default function App() {
               <strong className="font-medium">Supabase not configured.</strong> Copy <code className="rounded-xs bg-canvas type-mono px-1.5 py-0.5 text-xs">.env.example</code> to{' '}
               <code className="rounded-xs bg-canvas type-mono px-1.5 py-0.5 text-xs">.env.local</code>, set <code className="rounded-xs bg-canvas type-mono px-1.5 py-0.5 text-xs">VITE_SUPABASE_URL</code> and{' '}
               <code className="rounded-xs bg-canvas type-mono px-1.5 py-0.5 text-xs">VITE_SUPABASE_ANON_KEY</code>, then restart <code className="rounded-xs bg-canvas type-mono px-1.5 py-0.5 text-xs">npm run dev</code>.
+            </div>
+          </div>
+        )}
+
+        {user && workspaceError && (
+          <div className="border-b border-hairline bg-surface-2 px-4 py-3 sm:px-6">
+            <div className="max-w-7xl mx-auto type-body-sm text-semantic-error" role="alert">
+              <strong className="font-medium">Workspace setup failed.</strong> {workspaceError}
             </div>
           </div>
         )}

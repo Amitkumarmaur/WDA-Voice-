@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 /** Browser-safe check: real keys present (not empty and not .env.example placeholders). */
 export function isSupabaseEnvConfigured(): boolean {
@@ -29,5 +29,5 @@ export function getSupabase(): SupabaseClient {
 
 export function getSupabaseUrl(): string {
   if (!url) throw new Error('Missing VITE_SUPABASE_URL');
-  return url;
+  return url.trim();
 }
