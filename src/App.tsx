@@ -311,7 +311,7 @@ export default function App() {
         <nav className="sticky top-0 z-50 border-b border-hairline-soft bg-canvas/95 px-4 py-3 sm:px-6">
           <div className="max-w-7xl mx-auto flex min-w-0 items-center justify-between gap-2">
             <Link
-              to="/"
+              to="/app"
               className="flex max-w-[min(100%,240px)] shrink-0 items-center"
             >
               <VoiceraLogo className="h-9 w-auto sm:h-10" />
