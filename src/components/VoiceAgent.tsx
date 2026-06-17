@@ -392,11 +392,8 @@ ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `${item.title}: ${item.
         // 0.6 gives natural response variation while staying on-topic.
         // Too low (0.3) makes every sentence sound patterned and robotic.
         temperature: 0.6,
-        // enableAffectiveDialog: true lets the model detect emotion in the
-        // caller's voice (frustration, confusion, warmth) and soften/adjust
-        // delivery accordingly — the core of sounding human. The system prompt
-        // already guards against theatrical overreaction.
-        enableAffectiveDialog: true,
+        // enableAffectiveDialog is a preview-only flag that triggers WS 1011
+        // disconnects on Gemini Live with ephemeral auth tokens. Omitted until stable.
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
@@ -413,8 +410,9 @@ ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `${item.title}: ${item.
             endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
           },
         },
-        // Preview-only flags often trigger opaque WS 1011 on Gemini Live + ephemeral auth; omit until stable.
-        ...(resumeHandle ? { sessionResumption: { handle: resumeHandle } } : {}),
+        // Always request session resumption so the server issues handles we can reconnect with.
+        // On reconnect, pass the last known handle so the session state is restored.
+        sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
         tools: [
           {
             functionDeclarations: [
@@ -575,13 +573,6 @@ ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `${item.title}: ${item.
 
   async function attemptReconnect() {
     if (userEndedCallRef.current || isReconnectingRef.current) return;
-    const handle = resumptionHandleRef.current;
-    if (!handle) {
-      userEndedCallRef.current = true;
-      stopSession();
-      setStatus('Connection lost');
-      return;
-    }
 
     isReconnectingRef.current = true;
     setStatus('Reconnecting…');
@@ -591,8 +582,9 @@ ${knowledgeItems.length > 0 ? knowledgeItems.map(item => `${item.title}: ${item.
       reconnectAttemptsRef.current += 1;
       await new Promise((r) => setTimeout(r, Math.min(800 * reconnectAttemptsRef.current, 4000)));
       try {
+        // Use resumption handle if we have one, otherwise fall back to a fresh connection.
         await connectLive({
-          resumeHandle: resumptionHandleRef.current ?? handle,
+          resumeHandle: resumptionHandleRef.current ?? null,
           fromReconnect: true,
         });
         reconnectAttemptsRef.current = 0;
