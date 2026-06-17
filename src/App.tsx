@@ -526,10 +526,35 @@ export default function App() {
             ) : (
               <p className="type-body text-ink-muted max-w-5xl mx-auto">Admin access only.</p>
             )
-          ) : !organizationId || !user ? (
-            <p className="type-body text-ink-muted max-w-5xl mx-auto">Sign in to manage your workspace.</p>
+          ) : !user ? (
+            <div className="max-w-5xl mx-auto text-center space-y-4 py-16">
+              <p className="type-body text-ink-muted">Sign in to manage your workspace.</p>
+              <button
+                type="button"
+                onClick={() => void handleLogin()}
+                className="inline-flex items-center gap-2 border border-hairline bg-surface-1 rounded-md px-5 py-2.5 type-body-sm font-medium text-ink hover:border-ink/20"
+              >
+                <LogIn size={18} />
+                Continue with Google
+              </button>
+            </div>
+          ) : !organizationId ? (
+            <div className="max-w-5xl mx-auto text-center space-y-4 py-16">
+              <Loader2 className="w-8 h-8 text-ink-muted animate-spin mx-auto" />
+              <p className="type-body text-ink-muted">Loading your workspace…</p>
+              <button
+                type="button"
+                onClick={() => void loadWorkspace(user.id)}
+                className="inline-flex items-center gap-2 border border-hairline bg-surface-1 rounded-md px-5 py-2.5 type-body-sm font-medium text-ink hover:border-ink/20"
+              >
+                Retry
+              </button>
+            </div>
           ) : !orgRow ? (
-            <p className="type-body text-ink-muted max-w-5xl mx-auto">Loading workspace…</p>
+            <div className="max-w-5xl mx-auto text-center py-16">
+              <Loader2 className="w-8 h-8 text-ink-muted animate-spin mx-auto" />
+              <p className="type-body text-ink-muted mt-4">Loading workspace…</p>
+            </div>
           ) : (
             <BusinessDashboardShell
               organizationId={organizationId}
